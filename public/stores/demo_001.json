@@ -1,0 +1,31 @@
+{
+  "store_id": "demo_001",
+  "store_name": "Demo Store (ทดสอบ)",
+  "floor": 1,
+  "initial_heading_deg": 0,
+  "proximity_radius_m": 1.5,
+
+  "waypoints": {
+    "W1": { "x": 0,    "z": 0,     "label": "จุดเริ่มต้น (QR)" },
+    "W2": { "x": 0,    "z": -4,    "label": "จุดที่ 2 (ตรงไป 4m)" },
+    "W3": { "x": 4,    "z": -4,    "label": "จุดที่ 3 (เลี้ยวขวา 4m)" },
+    "W4": { "x": 4,    "z": -8,    "label": "จุดที่ 4 (เลี้ยวซ้าย 4m)" },
+    "W5": { "x": 0,    "z": -8,    "label": "ร้านปลายทาง (เลี้ยวซ้าย 4m)" }
+  },
+
+  "edges": [
+    ["W1", "W2"],
+    ["W2", "W3"],
+    ["W3", "W4"],
+    ["W4", "W5"]
+  ],
+
+  "destinations": [
+    { "name": "จุดที่ 2",          "waypoint": "W2", "icon": "📍" },
+    { "name": "จุดที่ 3",          "waypoint": "W3", "icon": "📍" },
+    { "name": "จุดที่ 4",          "waypoint": "W4", "icon": "📍" },
+    { "name": "ร้านปลายทาง",     "waypoint": "W5", "icon": "🏪" }
+  ],
+
+  "_comment": "Demo store สำหรับทดสอบ Phase 1-2 ใช้ในร่ม/ลานจอดรถก็ได้"
+}
