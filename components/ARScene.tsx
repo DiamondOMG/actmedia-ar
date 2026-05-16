@@ -127,8 +127,8 @@ export default function ARScene() {
   }
 
   return (
-    <div ref={containerRef} className="absolute inset-0 w-full h-full bg-black">
-      <canvas id="camerafeed" className="absolute inset-0 w-full h-full object-cover"></canvas>
+    <div ref={containerRef} className="absolute inset-0 w-full h-full bg-black overflow-hidden">
+      <canvas id="camerafeed"></canvas>
       
       {!xrStarted && (
         <div className="absolute inset-0 flex items-center justify-center text-white pointer-events-none z-10">
