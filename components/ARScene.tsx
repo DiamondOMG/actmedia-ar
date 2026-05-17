@@ -20,7 +20,7 @@ export default function ARScene() {
   
   const [storeData, setStoreData] = useState<StoreData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isMenuOpen, setIsMenuOpen] = useState(true);
+  const [isMenuOpen, setIsMenuOpen] = useState(false); // เริ่มปิดเมนู ให้เห็นลูกศรทันที
   const [selectedTarget, setSelectedTarget] = useState<any>(null);
   const [navInfo, setNavInfo] = useState<any>(null);
   const [trackingStatus, setTrackingStatus] = useState("NORMAL");
@@ -40,6 +40,12 @@ export default function ARScene() {
         setStoreData(data);
         if (data.initial_heading_deg) {
           positionProvider.setHeadingOffset(data.initial_heading_deg);
+        }
+        // เลือก destination ตัวแรกเป็น default เพื่อให้ลูกศรขึ้นทันที
+        if (data.destinations && data.destinations.length > 0) {
+          const defaultDest = data.destinations[0];
+          setSelectedTarget(defaultDest);
+          window.navTargetId = defaultDest.waypoint;
         }
       })
       .catch((err) => {
@@ -74,8 +80,7 @@ export default function ARScene() {
         XR8.Threejs.pipelineModule(),
         XR8.XrController.pipelineModule(),
         XRExtras.AlmostThere.pipelineModule(),
-        XRExtras.FullWindowCanvas.pipelineModule(), // ★ ตัวปัญหาที่หายไป! ทำให้กล้องเต็มจอ
-        XRExtras.Loading.pipelineModule(),
+        XRExtras.FullWindowCanvas.pipelineModule(),
         XRExtras.RuntimeError.pipelineModule(),
         initScenePipelineModule(storeData),
       ]);
@@ -132,8 +137,14 @@ export default function ARScene() {
       <canvas id="camerafeed"></canvas>
       
       {!xrStarted && (
-        <div className="absolute inset-0 flex items-center justify-center text-white pointer-events-none z-10">
-          <span className="bg-black/50 px-4 py-2 rounded-lg">กำลังเปิดกล้อง AR...</span>
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950 pointer-events-none z-10">
+          <div className="absolute left-1/2 top-1/2 h-[300px] w-[300px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-purple-600/20 blur-[100px]" />
+          <div className="relative mb-6">
+            <div className="h-16 w-16 rounded-full border-4 border-purple-500/20" />
+            <div className="absolute inset-0 h-16 w-16 rounded-full border-4 border-transparent border-t-purple-500 animate-spin" />
+          </div>
+          <p className="text-lg font-semibold text-white mb-1">กำลังเปิดกล้อง AR</p>
+          <p className="text-sm text-slate-400">กรุณารอสักครู่...</p>
         </div>
       )}
 
