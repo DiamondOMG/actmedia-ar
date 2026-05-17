@@ -34,9 +34,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Missing svix headers" }, { status: 400 });
   }
 
-  // อ่าน Body
-  const payload = await req.json();
-  const body = JSON.stringify(payload);
+  // อ่าน Raw Body (ต้องใช้ text ไม่ใช่ json เพื่อให้ signature ตรงกับต้นฉบับ)
+  const body = await req.text();
 
   // Verify Signature ด้วย svix
   const wh = new Webhook(WEBHOOK_SECRET);
