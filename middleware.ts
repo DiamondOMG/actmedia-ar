@@ -1,0 +1,23 @@
+import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+
+// กำหนด Route ที่ต้องการล็อกความปลอดภัย (ต้อง Login ก่อนเข้าใช้งาน)
+// ในที่นี้เราจะป้องกันหน้า /admin ทั้งหมด และ API ที่ขึ้นต้นด้วย /api/admin
+const isProtectedRoute = createRouteMatcher([
+  "/admin(.*)",
+  "/api/admin(.*)"
+]);
+
+export default clerkMiddleware(async (auth, req) => {
+  if (isProtectedRoute(req)) {
+    await auth.protect();
+  }
+});
+
+export const config = {
+  matcher: [
+    // ข้ามการประมวลผลไฟล์ภายในของ Next.js และ Static Files ทั้งหมด (รูปภาพ, CSS, โมเดล 3D)
+    "/((?!_next|[^?]*\\.[^?]*$).*)",
+    // บังคับรัน Middleware เสมอสำหรับ API และ trpc
+    "/(api|trpc)(.*)",
+  ],
+};
