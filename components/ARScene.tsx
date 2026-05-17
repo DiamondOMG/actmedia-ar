@@ -41,9 +41,10 @@ export default function ARScene() {
         if (data.initial_heading_deg) {
           positionProvider.setHeadingOffset(data.initial_heading_deg);
         }
-        // เลือก destination ตัวแรกเป็น default เพื่อให้ลูกศรขึ้นทันที
+        // เลือก destination จุดที่ 5 เป็น default เพื่อให้ลูกศรขึ้นทันที
         if (data.destinations && data.destinations.length > 0) {
-          const defaultDest = data.destinations[0];
+          const defaultIndex = Math.min(4, data.destinations.length - 1);
+          const defaultDest = data.destinations[defaultIndex];
           setSelectedTarget(defaultDest);
           window.navTargetId = defaultDest.waypoint;
         }
@@ -151,10 +152,27 @@ export default function ARScene() {
       {storeData && (
         <div className="absolute inset-0 pointer-events-none font-sans z-[100]">
           <div className="absolute top-0 left-0 right-0 p-4 pointer-events-auto flex justify-between items-start">
+            {/* ★ แถบรวม: ไอคอน + ชื่อปลายทาง + ระยะทาง (แถบเดียว) */}
             {selectedTarget && !isMenuOpen ? (
-              <div className="bg-black/60 backdrop-blur-md rounded-2xl px-4 py-2 border border-white/10 shadow-lg flex flex-col items-center mt-2">
-                 <span className="text-[10px] uppercase tracking-widest text-purple-300 font-bold">{storeData.store_name}</span>
-                 <span className="text-white font-bold text-lg">{selectedTarget.name}</span>
+              <div className="bg-black/60 backdrop-blur-md rounded-2xl px-3 py-2.5 border border-white/10 shadow-lg flex items-center gap-3 mt-2 flex-1 mr-3">
+                <div className="bg-purple-500 p-2 rounded-xl shadow-lg shadow-purple-500/40 shrink-0">
+                  <MapPin className="text-white" size={18} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[9px] uppercase tracking-widest text-purple-300 font-bold">{storeData.store_name}</div>
+                  <div className="text-white font-bold text-sm truncate">{selectedTarget.name}</div>
+                </div>
+                {navInfo && !navInfo.isArrived && (
+                  <div className="text-right shrink-0 pl-2 border-l border-white/10">
+                    <div className="text-[9px] text-slate-400 uppercase">ระยะทาง</div>
+                    <div className="text-xl font-black text-white leading-tight">{navInfo.distance}<span className="text-[10px] font-normal text-slate-300 ml-0.5">ม.</span></div>
+                  </div>
+                )}
+                {navInfo && navInfo.isArrived && (
+                  <div className="shrink-0 pl-2">
+                    <span className="text-lg">🏁</span>
+                  </div>
+                )}
               </div>
             ) : <div />}
 
@@ -167,7 +185,7 @@ export default function ARScene() {
           </div>
 
           {trackingStatus !== 'NORMAL' && !navInfo?.isArrived && !isMenuOpen && (
-            <div className="absolute top-24 left-6 right-6 bg-red-500/90 text-white p-4 rounded-2xl shadow-2xl backdrop-blur-md animate-pulse border border-red-400 pointer-events-auto">
+            <div className="absolute top-20 left-6 right-6 bg-red-500/90 text-white p-4 rounded-2xl shadow-2xl backdrop-blur-md animate-pulse border border-red-400 pointer-events-auto">
               <div className="flex items-center space-x-3">
                 <div className="text-3xl">📱</div>
                 <div className="text-left">
@@ -178,33 +196,18 @@ export default function ARScene() {
             </div>
           )}
 
-          {selectedTarget && navInfo && !isMenuOpen && (
+          {/* ★ แถบถึงที่หมาย (แสดงเฉพาะตอน arrived) */}
+          {selectedTarget && navInfo?.isArrived && !isMenuOpen && (
             <div className="absolute bottom-10 left-6 right-6 pointer-events-auto">
-              <div className={`p-6 rounded-3xl backdrop-blur-xl shadow-2xl border border-white/20 transition-all ${
-                navInfo.isArrived ? 'bg-green-500/90' : 'bg-slate-900/80'
-              }`}>
-                {navInfo.isArrived ? (
-                  <div className="text-center py-2 animate-bounce">
-                    <div className="text-4xl mb-2">🏁</div>
-                    <h2 className="text-2xl font-bold text-white">ยินดีด้วย! คุณถึงที่หมายแล้ว</h2>
-                    <button 
-                      onClick={() => { setSelectedTarget(null); setIsMenuOpen(true) }}
-                      className="mt-4 px-6 py-2 bg-white text-green-600 rounded-full font-bold"
-                    >
-                      เลือกร้านอื่น
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex items-center space-x-4">
-                    <div className="bg-purple-500 p-4 rounded-2xl shadow-lg shadow-purple-500/50">
-                      <MapPin className="text-white animate-pulse" size={32} />
-                    </div>
-                    <div className="flex-1">
-                      <div className="text-xs text-slate-400 uppercase tracking-tighter">ระยะทางที่เหลือ</div>
-                      <div className="text-3xl font-black text-white">{navInfo.distance} <span className="text-lg font-normal">เมตร</span></div>
-                    </div>
-                  </div>
-                )}
+              <div className="p-5 rounded-2xl backdrop-blur-xl shadow-2xl border border-white/20 bg-green-500/90 text-center">
+                <div className="text-3xl mb-1">🏁</div>
+                <h2 className="text-xl font-bold text-white">ยินดีด้วย! คุณถึงที่หมายแล้ว</h2>
+                <button 
+                  onClick={() => { setSelectedTarget(null); setIsMenuOpen(true) }}
+                  className="mt-3 px-6 py-2 bg-white text-green-600 rounded-full font-bold text-sm"
+                >
+                  เลือกร้านอื่น
+                </button>
               </div>
             </div>
           )}
