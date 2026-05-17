@@ -26,15 +26,6 @@ export default function ARScene() {
   const [trackingStatus, setTrackingStatus] = useState("NORMAL");
   const [xrStarted, setXrStarted] = useState(false);
 
-  // ★ ดักปุ่ม Back ของเบราวเซอร์: บังคับ Full Reload เพื่อปิดกล้องให้สะอาด
-  useEffect(() => {
-    const handlePopState = () => {
-      window.location.reload();
-    };
-    window.addEventListener("popstate", handlePopState);
-    return () => window.removeEventListener("popstate", handlePopState);
-  }, []);
-
   useEffect(() => {
     const storeId = searchParams.get("store");
     if (!storeId) {

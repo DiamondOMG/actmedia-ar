@@ -19,6 +19,7 @@ export const metadata: Metadata = {
 
 import { ClerkProvider } from "@clerk/nextjs";
 import Script from "next/script";
+import XRGuard from "../components/XRGuard";
 
 export default function RootLayout({
   children,
@@ -52,7 +53,10 @@ export default function RootLayout({
             crossOrigin="anonymous"
           />
         </head>
-        <body className="min-h-full flex flex-col">{children}</body>
+        <body className="min-h-full flex flex-col">
+          <XRGuard />
+          {children}
+        </body>
       </html>
     </ClerkProvider>
   );
