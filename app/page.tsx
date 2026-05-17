@@ -86,7 +86,7 @@ export default async function Home() {
           <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
             {userId ? (
               <Link
-                href="/admin"
+                href="/dashboard"
                 className="group flex items-center gap-2 rounded-xl bg-purple-600 px-8 py-3.5 text-base font-semibold text-white shadow-lg shadow-purple-600/25 transition hover:bg-purple-500 hover:shadow-purple-500/30"
               >
                 เข้าสู่ Dashboard
@@ -94,7 +94,7 @@ export default async function Home() {
               </Link>
             ) : (
               <Link
-                href="/sign-up"
+                href="/dashboard"
                 className="group flex items-center gap-2 rounded-xl bg-purple-600 px-8 py-3.5 text-base font-semibold text-white shadow-lg shadow-purple-600/25 transition hover:bg-purple-500 hover:shadow-purple-500/30"
               >
                 เริ่มต้นใช้งาน
