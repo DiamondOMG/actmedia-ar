@@ -18,3 +18,15 @@ export const stores = sqliteTable("stores", {
   createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
   updatedAt: integer("updated_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
 });
+
+// ตารางสำหรับเก็บผู้ใช้งาน (Admin/Staff) อิงตาม Clerk User ID
+export const users = sqliteTable("users", {
+  id: text("id").primaryKey(), // รับค่ามาจาก id ของ Clerk โดยตรง (เช่น user_2xxx...)
+  email: text("email").notNull().unique(),
+  firstName: text("first_name"),
+  lastName: text("last_name"),
+  role: text("role").default("admin"), // สถานะแอดมินหรือร้านค้า (เผื่ออนาคต)
+  
+  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
+});
