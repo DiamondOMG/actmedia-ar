@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { loadStoreData, StoreData } from "../lib/store-loader";
 import { positionProvider } from "../lib/position-provider";
 import { initScenePipelineModule } from "../lib/scene-init";
-import { Menu, X, MapPin } from "lucide-react";
+import { Menu, X, MapPin, Home } from "lucide-react";
 
 import * as THREE from "three";
 
@@ -25,6 +25,15 @@ export default function ARScene() {
   const [navInfo, setNavInfo] = useState<any>(null);
   const [trackingStatus, setTrackingStatus] = useState("NORMAL");
   const [xrStarted, setXrStarted] = useState(false);
+
+  // ★ ดักปุ่ม Back ของเบราวเซอร์: บังคับ Full Reload เพื่อปิดกล้องให้สะอาด
+  useEffect(() => {
+    const handlePopState = () => {
+      window.location.reload();
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
 
   useEffect(() => {
     const storeId = searchParams.get("store");
@@ -214,6 +223,18 @@ export default function ARScene() {
           }`}>
             <div className="p-6 mt-16 overflow-y-auto pb-24">
               <h2 className="text-2xl font-bold text-white mb-6">เลือกร้านปลายทาง 🎯</h2>
+
+              {/* ★ ปุ่มกลับหน้าแรก (ใช้ <a> เพื่อ Hard Reload ปิดกล้อง) */}
+              <a
+                href="/"
+                className="flex items-center p-4 rounded-2xl bg-slate-800 border-2 border-slate-700 text-left mb-4 active:bg-slate-700 transition-all"
+              >
+                <span className="text-3xl mr-4"><Home size={28} className="text-slate-300" /></span>
+                <div className="flex-1">
+                  <div className="font-bold text-lg text-white">กลับหน้าแรก</div>
+                  <div className="text-xs opacity-60 text-slate-300 uppercase">ปิดกล้องและกลับสู่ Dashboard</div>
+                </div>
+              </a>
               <div className="grid grid-cols-1 gap-3">
                 {storeData?.destinations?.map((dest: any) => (
                   <button
