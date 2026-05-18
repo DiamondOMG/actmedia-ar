@@ -26,15 +26,18 @@ export function getStoreParams() {
 }
 
 export async function loadStoreData(storeId: string): Promise<StoreData> {
-  // รองรับ 2 แบบ: Static JSON หรือ API
-  // เปลี่ยนจาก import.meta.env (Vite) เป็น process.env.NEXT_PUBLIC_ (Next.js)
-  const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL;
-  const url = apiBase
-    ? `${apiBase}/stores/${storeId}`
-    : `/stores/${storeId}.json`;
+  // ดึงจาก API ของเราก่อน
+  const url = `/api/stores/${storeId}`;
 
   try {
-    const response = await fetch(url);
+    let response = await fetch(url);
+    
+    // ถ้าไม่พบใน DB (404) ให้ fallback ไปที่ไฟล์ static .json
+    if (!response.ok && response.status === 404) {
+      console.log(`[StoreLoader] Store "${storeId}" not found in DB, falling back to static JSON...`);
+      response = await fetch(`/stores/${storeId}.json`);
+    }
+
     if (!response.ok) {
       throw new Error(`ไม่พบข้อมูลห้าง: ${storeId} (HTTP ${response.status})`);
     }

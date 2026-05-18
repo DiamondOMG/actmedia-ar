@@ -2,7 +2,8 @@ import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
 
 // ตารางสำหรับเก็บแผนที่ห้าง (Stores)
 export const stores = sqliteTable("stores", {
-  id: text("id").primaryKey(), // เช่น 'demo_001'
+  id: text("id").primaryKey(), // เช่น 'demo_001' หรือ auto-gen UUID
+  userId: text("user_id").notNull(), // FK ไปยัง Clerk user ID
   name: text("name").notNull(),
   floor: integer("floor").default(1),
   initialHeadingDeg: real("initial_heading_deg").default(0),

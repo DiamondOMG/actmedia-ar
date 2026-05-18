@@ -25,6 +25,19 @@ export default function ARScene() {
   const [navInfo, setNavInfo] = useState<any>(null);
   const [trackingStatus, setTrackingStatus] = useState("NORMAL");
   const [xrStarted, setXrStarted] = useState(false);
+  const [storesList, setStoresList] = useState<any[]>([]);
+
+  // ดึงแผนที่ทั้งหมดสำหรับปุ่มสลับแผนที่
+  useEffect(() => {
+    fetch("/api/stores")
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setStoresList(data);
+        }
+      })
+      .catch((err) => console.error("Failed to load stores list:", err));
+  }, []);
 
   useEffect(() => {
     const storeId = searchParams.get("store");
@@ -248,6 +261,41 @@ export default function ARScene() {
                   </button>
                 ))}
               </div>
+
+              {/* ★ สลับแผนที่นำทาง */}
+              {storesList.length > 0 && (
+                <div className="mt-8 border-t border-white/10 pt-6">
+                  <h2 className="text-xl font-bold text-white mb-4">สลับแผนที่นำทาง 🗺️</h2>
+                  <div className="grid grid-cols-1 gap-3">
+                    {storesList.map((store) => {
+                      let wpCount = 0;
+                      try {
+                        wpCount = Object.keys(JSON.parse(store.waypointsJson)).length;
+                      } catch(e) {}
+                      
+                      return (
+                        <a
+                          key={store.id}
+                          href={`/ar?store=${store.id}`}
+                          className={`flex items-center p-4 rounded-2xl transition-all border-2 text-left ${
+                            storeData?.store_id === store.id
+                              ? 'bg-purple-600/30 border-purple-500 ring-2 ring-purple-500/50'
+                              : 'bg-slate-800 border-slate-700 active:bg-slate-700'
+                          }`}
+                        >
+                          <span className="text-3xl mr-4">🗺️</span>
+                          <div className="flex-1">
+                            <div className="font-bold text-lg text-white">{store.name}</div>
+                            <div className="text-xs opacity-60 text-slate-300">
+                              ชั้น {store.floor ?? 1} • {wpCount} Waypoints
+                            </div>
+                          </div>
+                        </a>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
