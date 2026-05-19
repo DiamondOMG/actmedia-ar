@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 
-// โหลด ARRecordScene เฉพาะฝั่ง Client ป้องกัน SSR Error
+// โหลด ARRecordScene เฉพาะฝั่ง Client ป้องกัน SSR Error-
 const ARRecordScene = dynamic(() => import("@/components/ARRecordScene"), {
   ssr: false,
   loading: () => (
