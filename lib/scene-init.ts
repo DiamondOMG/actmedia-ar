@@ -81,6 +81,21 @@ export const initScenePipelineModule = (storeData: StoreData | null) => {
       if (!camera) return;
       
       positionProvider.updateFromSlam(camera.position, camera.quaternion);
+
+      // คำนวณความเอียงของกล้อง (Pitch, Roll)
+      const euler = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
+      const pitchDeg = THREE.MathUtils.radToDeg(euler.x);
+      const rollDeg = THREE.MathUtils.radToDeg(euler.z);
+
+      window.xrCameraRot = {
+        pitch: pitchDeg,
+        roll: rollDeg
+      };
+
+      if (!window.xrCameraRawPos) {
+        window.xrCameraRawPos = new THREE.Vector3();
+      }
+      window.xrCameraRawPos.copy(camera.position);
       
       // Update target if user picked a new destination dynamically
       if (storeData && window.navTargetId && currentPath.length > 0 && currentPath[currentPath.length - 1] !== window.navTargetId) {

@@ -63,6 +63,21 @@ const initRecordPipelineModule = () => {
       const { camera } = XR8.Threejs.xrScene();
       if (!camera) return;
       positionProvider.updateFromSlam(camera.position, camera.quaternion);
+
+      // คำนวณความเอียงของกล้อง (Pitch, Roll)
+      const euler = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
+      const pitchDeg = THREE.MathUtils.radToDeg(euler.x);
+      const rollDeg = THREE.MathUtils.radToDeg(euler.z);
+
+      window.xrCameraRot = {
+        pitch: pitchDeg,
+        roll: rollDeg
+      };
+
+      if (!window.xrCameraRawPos) {
+        window.xrCameraRawPos = new THREE.Vector3();
+      }
+      window.xrCameraRawPos.copy(camera.position);
     },
   };
 };
@@ -85,6 +100,24 @@ export default function ARRecordScene() {
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [mapName, setMapName] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // --- DEBUG & TILT STATES ---
+  const [debugMode, setDebugMode] = useState(false);
+  const [pitch, setPitch] = useState(0);
+  const [roll, setRoll] = useState(0);
+  const [cameraRaw, setCameraRaw] = useState({ x: 0, y: 0, z: 0 });
+  const [cameraScaled, setCameraScaled] = useState({ x: 0, y: 0, z: 0 });
+  const [scaleFactor, setScaleFactor] = useState(1.7);
+  const [isPitchTooLow, setIsPitchTooLow] = useState(false);
+  const [isRollTooHigh, setIsRollTooHigh] = useState(false);
+
+  // Check debug parameter on mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      setDebugMode(params.get("debug") === "true");
+    }
+  }, []);
 
   // References for interval usage
   const recStateRef = useRef(recState);
@@ -124,6 +157,7 @@ export default function ARRecordScene() {
     startAR();
 
     const interval = setInterval(() => {
+      // 1. คำนวณระยะห่างจุดล่าสุด
       if (recStateRef.current === "recording" && wpCountRef.current > 0) {
         const lastWp = waypointsRef.current[`W${wpCountRef.current}`];
         if (lastWp) {
@@ -133,6 +167,34 @@ export default function ARRecordScene() {
           setDistanceToLast(dist);
         }
       }
+
+      // 2. ดึงข้อมูลความเอียงและพิกัดดิบจาก window
+      if (window.xrCameraRot) {
+        const { pitch, roll } = window.xrCameraRot;
+        setPitch(pitch);
+        setRoll(roll);
+
+        // เตือนก้มเกินไป (เช่น ต่ำกว่า -45 องศา หรือ เงยขึ้นเกิน 25 องศา)
+        setIsPitchTooLow(pitch < -45 || pitch > 25);
+        // เตือนโทรศัพท์เอียงซ้ายขวา (เอียงเกิน 15 องศา)
+        setIsRollTooHigh(Math.abs(roll) > 15);
+      }
+
+      if (window.xrCameraRawPos) {
+        setCameraRaw({
+          x: window.xrCameraRawPos.x,
+          y: window.xrCameraRawPos.y,
+          z: window.xrCameraRawPos.z
+        });
+      }
+
+      setCameraScaled({
+        x: positionProvider.position.x,
+        y: positionProvider.position.y,
+        z: positionProvider.position.z
+      });
+
+      setScaleFactor(positionProvider.scaleFactor);
     }, 150);
 
     return () => {
@@ -151,18 +213,20 @@ export default function ARRecordScene() {
 
   const addMarker3D = (x: number, z: number) => {
     if (!recordScene) return;
+    const factor = positionProvider.scaleFactor;
     const geometry = new THREE.SphereGeometry(0.12, 16, 16);
     const material = new THREE.MeshBasicMaterial({ color: 0xa855f7 });
     const sphere = new THREE.Mesh(geometry, material);
-    sphere.position.set(x, 0.12, z);
+    sphere.position.set(x / factor, 0.12, z / factor);
     recordScene.add(sphere);
   };
 
   const addLine3D = (x1: number, z1: number, x2: number, z2: number) => {
     if (!recordScene) return;
+    const factor = positionProvider.scaleFactor;
     const points = [
-      new THREE.Vector3(x1, 0.08, z1),
-      new THREE.Vector3(x2, 0.08, z2),
+      new THREE.Vector3(x1 / factor, 0.08, z1 / factor),
+      new THREE.Vector3(x2 / factor, 0.08, z2 / factor),
     ];
     const geometry = new THREE.BufferGeometry().setFromPoints(points);
     const material = new THREE.LineBasicMaterial({ color: 0xa855f7, linewidth: 3 });
@@ -287,6 +351,30 @@ export default function ARRecordScene() {
   return (
     <div ref={containerRef} className="absolute inset-0 w-full h-full bg-black overflow-hidden font-sans">
       <canvas id="camerafeed" className="absolute inset-0 w-full h-full object-cover"></canvas>
+
+      {/* แจ้งเตือนกล้องเอียง (Tilt Warning) */}
+      {(isPitchTooLow || isRollTooHigh) && (
+        <div className="absolute top-24 inset-x-6 z-50 bg-red-500/95 text-white p-4 rounded-2xl shadow-2xl border border-red-400 text-center animate-pulse pointer-events-auto">
+          <div className="font-bold text-lg">⚠️ กรุณาตั้งกล้องให้ตรง</div>
+          <div className="text-xs opacity-90 mt-1">
+            {isPitchTooLow && "หลีกเลี่ยงการก้มกล้องส่องพื้นใกล้ตัวเกินไป "}
+            {isRollTooHigh && "กรุณาถือโทรศัพท์ให้ตรงแนวตั้ง ไม่เอียงซ้าย/ขวา"}
+          </div>
+        </div>
+      )}
+
+      {/* แผงดีบักพิกัดสด (Debug Overlay) */}
+      {debugMode && (
+        <div className="absolute top-24 left-6 z-40 bg-black/70 backdrop-blur-md p-4 rounded-2xl border border-white/10 text-white text-[10px] font-mono shadow-xl flex flex-col gap-1 w-60 pointer-events-none">
+          <div className="font-bold text-purple-400 border-b border-white/10 pb-1 mb-1 text-xs">🔍 RECORD DEBUG PANEL</div>
+          <div>Raw SLAM: ({cameraRaw.x.toFixed(2)}, {cameraRaw.z.toFixed(2)})</div>
+          <div>Scaled: ({cameraScaled.x.toFixed(2)}, {cameraScaled.z.toFixed(2)})</div>
+          <div>Scale Factor: {scaleFactor.toFixed(3)}</div>
+          <div>Pitch (ก้ม/เงย): {pitch.toFixed(1)}° {isPitchTooLow ? "❌ (ก้มเกิน)" : "✅"}</div>
+          <div>Roll (ซ้าย/ขวา): {roll.toFixed(1)}° {isRollTooHigh ? "❌ (เอียงเกิน)" : "✅"}</div>
+          <div>Waypoints Count: {wpCount}</div>
+        </div>
+      )}
 
       {/* Top Left: Distance */}
       {recState === "recording" && (
