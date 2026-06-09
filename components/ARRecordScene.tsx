@@ -220,15 +220,53 @@ export default function ARRecordScene() {
     }
     setIsSubmitting(true);
     const mapId = `map_${Date.now()}`;
+
+    // --- AUTO-GENERATE 5 DEFAULT DESTINATIONS ---
+    const defaultStores = [
+      { icon: "🏪", name: "ร้านค้า (Demo)", desc: "จุดแวะพัก" },
+      { icon: "☕", name: "ร้านกาแฟ (Demo)", desc: "เครื่องดื่ม" },
+      { icon: "👕", name: "ร้านเสื้อผ้า (Demo)", desc: "แฟชั่น" },
+      { icon: "🚻", name: "ห้องน้ำ (Demo)", desc: "สิ่งอำนวยความสะดวก" },
+      { icon: "🏁", name: "จุดหมาย (Demo)", desc: "ปลายทาง" },
+    ];
+
+    const generatedDestinations: any[] = [];
+    const wpKeys = Object.keys(waypoints);
+    // Exclude the starting point (W1) so we don't route to where we stand
+    const availableWps = wpKeys.slice(1);
+    
+    // Copy waypoints to modify their types without mutating React state during save
+    const finalWaypoints = JSON.parse(JSON.stringify(waypoints));
+
+    if (availableWps.length > 0) {
+      const numStores = Math.min(5, availableWps.length);
+      for (let i = 0; i < numStores; i++) {
+        // Spread destinations evenly across the available waypoints
+        const index = Math.floor((i / Math.max(1, numStores - 1)) * (availableWps.length - 1));
+        const wpId = availableWps[index];
+        
+        if (!generatedDestinations.some(d => d.waypoint === wpId)) {
+          generatedDestinations.push({
+            id: `dest_${wpId}`,
+            name: defaultStores[i].name,
+            waypoint: wpId,
+            icon: defaultStores[i].icon,
+            description: defaultStores[i].desc
+          });
+          finalWaypoints[wpId].type = "destination";
+        }
+      }
+    }
+
     const payload = {
       id: mapId,
       name: mapName,
       floor: 1,
       initialHeadingDeg: 0,
       proximityRadiusM: 2.5,
-      waypointsJson: JSON.stringify(waypoints),
+      waypointsJson: JSON.stringify(finalWaypoints),
       edgesJson: JSON.stringify(edges),
-      destinationsJson: JSON.stringify([]),
+      destinationsJson: JSON.stringify(generatedDestinations),
       comment: "",
     };
 
