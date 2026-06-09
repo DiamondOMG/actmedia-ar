@@ -86,7 +86,7 @@ export default function ARCalibrateScene() {
   const [xrStarted, setXrStarted] = useState(false);
   const [isCalibrating, setIsCalibrating] = useState(false);
   const [slamDistance, setSlamDistance] = useState(0);
-  const [scaleFactor, setScaleFactor] = useState(1.0);
+  const [scaleFactor, setScaleFactor] = useState(1.7);
   const [showInstruction, setShowInstruction] = useState(true);
 
   // โหลดค่า scaleFactor ล่าสุดจาก localStorage
@@ -271,10 +271,10 @@ export default function ARCalibrateScene() {
               className="flex-1 accent-purple-500 cursor-pointer h-1.5 bg-slate-700 rounded-lg appearance-none"
             />
             <button
-              onClick={() => handleApplyScaleFactor(1.0)}
+              onClick={() => handleApplyScaleFactor(1.7)}
               className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 rounded-lg text-[10px] font-bold text-slate-300"
             >
-              Reset (1.0)
+              Reset (1.7)
             </button>
           </div>
         </div>
