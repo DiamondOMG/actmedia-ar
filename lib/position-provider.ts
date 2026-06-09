@@ -11,6 +11,7 @@ export class PositionProvider {
   public position: THREE.Vector3;
   public quaternion: THREE.Quaternion;
   public headingOffsetRad: number;
+  public scaleFactor: number; // อัตราส่วนสเกลเพื่อปรับชดเชยระยะทางจริงกับ SLAM (ค่าเริ่มต้น 1.0)
   public corrections: PositionCorrection[];
   
   private _listeners: Record<string, Function[]>;
@@ -20,6 +21,24 @@ export class PositionProvider {
     this.position = new THREE.Vector3(0, 0, 0);
     this.quaternion = new THREE.Quaternion();
     this.headingOffsetRad = 0;
+    this.scaleFactor = 1.0;
+    
+    // โหลดค่า Scale Factor จาก localStorage ถ้าอยู่ในฝั่ง Client
+    if (typeof window !== "undefined") {
+      try {
+        const savedScale = localStorage.getItem("ar_scale_factor");
+        if (savedScale) {
+          const parsed = parseFloat(savedScale);
+          if (!isNaN(parsed) && parsed > 0) {
+            this.scaleFactor = parsed;
+            console.log(`[PositionProvider] Loaded saved scaleFactor: ${parsed}`);
+          }
+        }
+      } catch (e) {
+        console.error("[PositionProvider] Failed to load ar_scale_factor:", e);
+      }
+    }
+
     this._listeners = {
       positionUpdate: [],
       correctionApplied: [],
@@ -45,12 +64,17 @@ export class PositionProvider {
   }
 
   updateFromSlam(cameraPosition: THREE.Vector3, cameraQuaternion: THREE.Quaternion) {
+    // ปรับ Scale ของพิกัด X และ Z เพื่อปรับระยะห่างในโลกเสมือนให้เทียบเท่าระยะจริง
+    const adjustedPos = cameraPosition.clone();
+    adjustedPos.x *= this.scaleFactor;
+    adjustedPos.z *= this.scaleFactor;
+
     // Apply heading offset rotation
     if (this.headingOffsetRad !== 0) {
       const rotMatrix = new THREE.Matrix4().makeRotationY(this.headingOffsetRad);
-      this.position.copy(cameraPosition).applyMatrix4(rotMatrix);
+      this.position.copy(adjustedPos).applyMatrix4(rotMatrix);
     } else {
-      this.position.copy(cameraPosition);
+      this.position.copy(adjustedPos);
     }
 
     this.quaternion.copy(cameraQuaternion);

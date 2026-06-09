@@ -263,7 +263,7 @@ export default function ARRecordScene() {
       name: mapName,
       floor: 1,
       initialHeadingDeg: 0,
-      proximityRadiusM: 2.5,
+      proximityRadiusM: 1.5,
       waypointsJson: JSON.stringify(finalWaypoints),
       edgesJson: JSON.stringify(edges),
       destinationsJson: JSON.stringify(generatedDestinations),

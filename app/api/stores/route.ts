@@ -35,7 +35,7 @@ export async function POST(req: Request) {
       name,
       floor: floor || 1,
       initialHeadingDeg: initialHeadingDeg || 0,
-      proximityRadiusM: proximityRadiusM || 2.5,
+      proximityRadiusM: proximityRadiusM || 1.5,
       waypointsJson,
       edgesJson,
       destinationsJson,

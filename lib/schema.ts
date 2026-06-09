@@ -7,7 +7,7 @@ export const stores = sqliteTable("stores", {
   name: text("name").notNull(),
   floor: integer("floor").default(1),
   initialHeadingDeg: real("initial_heading_deg").default(0),
-  proximityRadiusM: real("proximity_radius_m").default(2.5),
+  proximityRadiusM: real("proximity_radius_m").default(1.5),
   
   // 💡 ออกแบบโดยเก็บเป็น JSON text เพื่อรองรับโครงสร้าง Graph ที่ซับซ้อน
   // ทำให้ฝั่ง Client ดึงไปคำนวณ A* Pathfinding และวาด Three.js ได้ใน Query เดียว (เร็วและจัดการง่ายมาก)

@@ -23,7 +23,7 @@ export async function GET(
       store_name: store.name,
       floor: store.floor ?? 1,
       initial_heading_deg: store.initialHeadingDeg ?? 0,
-      proximity_radius_m: store.proximityRadiusM ?? 2.5,
+      proximity_radius_m: store.proximityRadiusM ?? 1.5,
       waypoints: JSON.parse(store.waypointsJson),
       edges: JSON.parse(store.edgesJson),
       destinations: JSON.parse(store.destinationsJson),

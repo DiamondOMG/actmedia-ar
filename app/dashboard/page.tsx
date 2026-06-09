@@ -61,6 +61,20 @@ export default async function DashboardPage() {
             </div>
           </Link>
 
+          {/* Calibrate AR */}
+          <Link 
+            href="/ar/calibrate"
+            className="group flex items-center gap-4 rounded-2xl border-2 border-dashed border-indigo-500/30 bg-indigo-500/5 p-6 text-left transition hover:border-indigo-500/50 hover:bg-indigo-500/10"
+          >
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-500/20 text-indigo-400 transition group-hover:bg-indigo-500/30">
+              <Settings className="h-6 w-6" />
+            </div>
+            <div>
+              <div className="font-semibold text-white">Calibrate AR (ปรับสเกล)</div>
+              <div className="text-sm text-slate-400">ปรับเทียบระยะทางจริงกับ AR</div>
+            </div>
+          </Link>
+
           {/* Stats Card */}
           <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-6">
             <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-400">

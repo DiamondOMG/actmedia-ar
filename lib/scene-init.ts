@@ -114,7 +114,7 @@ export const initScenePipelineModule = (storeData: StoreData | null) => {
             isArrived
           };
           
-          const proximityRadius = storeData?.proximity_radius_m || 2.5;
+          const proximityRadius = storeData?.proximity_radius_m || 1.5;
           
           if (dist < proximityRadius) {
             if (currentWaypointIndex < currentPath.length - 1) {
