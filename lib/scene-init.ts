@@ -10,11 +10,11 @@ declare const window: any;
 export const initScenePipelineModule = (storeData: StoreData | null) => {
   let navArrow: NavigationArrow | null = null;
   const clock = new THREE.Clock();
-  
+
   let currentPath: string[] = [];
   let currentWaypointIndex = 0;
   let isArrived = false;
-  
+
   const initXrScene = ({ scene, camera, renderer }: any) => {
     renderer.shadowMap.enabled = true;
 
@@ -33,7 +33,7 @@ export const initScenePipelineModule = (storeData: StoreData | null) => {
       const path = findShortestPath(storeData.waypoints, storeData.edges, 'W1', targetId);
       if (path) {
         currentPath = path;
-        currentWaypointIndex = 1; 
+        currentWaypointIndex = 1;
       }
     }
 
@@ -79,32 +79,17 @@ export const initScenePipelineModule = (storeData: StoreData | null) => {
       if (typeof XR8 === 'undefined') return;
       const { camera } = XR8.Threejs.xrScene();
       if (!camera) return;
-      
+
       positionProvider.updateFromSlam(camera.position, camera.quaternion);
 
-      // คำนวณความเอียงของกล้อง (Pitch, Roll)
-      const euler = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
-      const pitchDeg = THREE.MathUtils.radToDeg(euler.x);
-      const rollDeg = THREE.MathUtils.radToDeg(euler.z);
-
-      window.xrCameraRot = {
-        pitch: pitchDeg,
-        roll: rollDeg
-      };
-
-      if (!window.xrCameraRawPos) {
-        window.xrCameraRawPos = new THREE.Vector3();
-      }
-      window.xrCameraRawPos.copy(camera.position);
-      
       // Update target if user picked a new destination dynamically
       if (storeData && window.navTargetId && currentPath.length > 0 && currentPath[currentPath.length - 1] !== window.navTargetId) {
-         const newPath = findShortestPath(storeData.waypoints, storeData.edges, 'W1', window.navTargetId);
-         if (newPath) {
-            currentPath = newPath;
-            currentWaypointIndex = 1;
-            isArrived = false;
-         }
+        const newPath = findShortestPath(storeData.waypoints, storeData.edges, 'W1', window.navTargetId);
+        if (newPath) {
+          currentPath = newPath;
+          currentWaypointIndex = 1;
+          isArrived = false;
+        }
       }
 
       if (navArrow && currentPath && currentPath.length > 0 && !isArrived) {
@@ -112,25 +97,25 @@ export const initScenePipelineModule = (storeData: StoreData | null) => {
         const currentTargetId = currentPath[currentWaypointIndex];
         const targetWaypoint = storeData?.waypoints[currentTargetId];
         const userPos = positionProvider.position;
-        
+
         if (targetWaypoint) {
           navArrow.updatePosition(camera.position, camera.quaternion);
           navArrow.setTarget(userPos, targetWaypoint);
-          
+
           const dist = getDistance(
             { x: userPos.x, z: userPos.z, label: '' },
             targetWaypoint
           );
-          
+
           window.navDebug = {
             targetId: currentTargetId,
             targetPos: `(${targetWaypoint.x}, ${targetWaypoint.z})`,
             distance: dist.toFixed(2),
             isArrived
           };
-          
+
           const proximityRadius = storeData?.proximity_radius_m || 1.5;
-          
+
           if (dist < proximityRadius) {
             if (currentWaypointIndex < currentPath.length - 1) {
               currentWaypointIndex++;
@@ -139,7 +124,7 @@ export const initScenePipelineModule = (storeData: StoreData | null) => {
               if (window.navDebug) window.navDebug.isArrived = true;
             }
           }
-          
+
           navArrow.update(delta);
         }
       }

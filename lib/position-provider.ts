@@ -21,7 +21,7 @@ export class PositionProvider {
     this.position = new THREE.Vector3(0, 0, 0);
     this.quaternion = new THREE.Quaternion();
     this.headingOffsetRad = 0;
-    this.scaleFactor = 1.7;
+    this.scaleFactor = 1.0;
     
     // โหลดค่า Scale Factor จาก localStorage ถ้าอยู่ในฝั่ง Client
     if (typeof window !== "undefined") {

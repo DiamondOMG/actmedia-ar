@@ -3,9 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { positionProvider } from "../lib/position-provider";
-import { 
+import {
   Menu,
-  MapPin, 
+  MapPin,
   Check,
   X,
   LogOut
@@ -63,21 +63,6 @@ const initRecordPipelineModule = () => {
       const { camera } = XR8.Threejs.xrScene();
       if (!camera) return;
       positionProvider.updateFromSlam(camera.position, camera.quaternion);
-
-      // คำนวณความเอียงของกล้อง (Pitch, Roll)
-      const euler = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
-      const pitchDeg = THREE.MathUtils.radToDeg(euler.x);
-      const rollDeg = THREE.MathUtils.radToDeg(euler.z);
-
-      window.xrCameraRot = {
-        pitch: pitchDeg,
-        roll: rollDeg
-      };
-
-      if (!window.xrCameraRawPos) {
-        window.xrCameraRawPos = new THREE.Vector3();
-      }
-      window.xrCameraRawPos.copy(camera.position);
     },
   };
 };
@@ -87,11 +72,11 @@ type RecordState = "idle" | "countdown" | "recording";
 export default function ARRecordScene() {
   const router = useRouter();
   const containerRef = useRef<HTMLDivElement>(null);
-  
+
   const [recState, setRecState] = useState<RecordState>("idle");
   const [countdown, setCountdown] = useState(3);
   const [showMenu, setShowMenu] = useState(false);
-  
+
   const [waypoints, setWaypoints] = useState<Record<string, any>>({});
   const [edges, setEdges] = useState<[string, string][]>([]);
   const [wpCount, setWpCount] = useState(0);
@@ -100,24 +85,6 @@ export default function ARRecordScene() {
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [mapName, setMapName] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // --- DEBUG & TILT STATES ---
-  const [debugMode, setDebugMode] = useState(false);
-  const [pitch, setPitch] = useState(0);
-  const [roll, setRoll] = useState(0);
-  const [cameraRaw, setCameraRaw] = useState({ x: 0, y: 0, z: 0 });
-  const [cameraScaled, setCameraScaled] = useState({ x: 0, y: 0, z: 0 });
-  const [scaleFactor, setScaleFactor] = useState(1.7);
-  const [isPitchTooLow, setIsPitchTooLow] = useState(false);
-  const [isRollTooHigh, setIsRollTooHigh] = useState(false);
-
-  // Check debug parameter on mount
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      setDebugMode(params.get("debug") === "true");
-    }
-  }, []);
 
   // References for interval usage
   const recStateRef = useRef(recState);
@@ -157,7 +124,6 @@ export default function ARRecordScene() {
     startAR();
 
     const interval = setInterval(() => {
-      // 1. คำนวณระยะห่างจุดล่าสุด
       if (recStateRef.current === "recording" && wpCountRef.current > 0) {
         const lastWp = waypointsRef.current[`W${wpCountRef.current}`];
         if (lastWp) {
@@ -167,34 +133,6 @@ export default function ARRecordScene() {
           setDistanceToLast(dist);
         }
       }
-
-      // 2. ดึงข้อมูลความเอียงและพิกัดดิบจาก window
-      if (window.xrCameraRot) {
-        const { pitch, roll } = window.xrCameraRot;
-        setPitch(pitch);
-        setRoll(roll);
-
-        // เตือนก้มเกินไป (เช่น ต่ำกว่า -45 องศา หรือ เงยขึ้นเกิน 25 องศา)
-        setIsPitchTooLow(pitch < -45 || pitch > 25);
-        // เตือนโทรศัพท์เอียงซ้ายขวา (เอียงเกิน 15 องศา)
-        setIsRollTooHigh(Math.abs(roll) > 15);
-      }
-
-      if (window.xrCameraRawPos) {
-        setCameraRaw({
-          x: window.xrCameraRawPos.x,
-          y: window.xrCameraRawPos.y,
-          z: window.xrCameraRawPos.z
-        });
-      }
-
-      setCameraScaled({
-        x: positionProvider.position.x,
-        y: positionProvider.position.y,
-        z: positionProvider.position.z
-      });
-
-      setScaleFactor(positionProvider.scaleFactor);
     }, 150);
 
     return () => {
@@ -213,20 +151,18 @@ export default function ARRecordScene() {
 
   const addMarker3D = (x: number, z: number) => {
     if (!recordScene) return;
-    const factor = positionProvider.scaleFactor;
     const geometry = new THREE.SphereGeometry(0.12, 16, 16);
     const material = new THREE.MeshBasicMaterial({ color: 0xa855f7 });
     const sphere = new THREE.Mesh(geometry, material);
-    sphere.position.set(x / factor, 0.12, z / factor);
+    sphere.position.set(x, 0.12, z);
     recordScene.add(sphere);
   };
 
   const addLine3D = (x1: number, z1: number, x2: number, z2: number) => {
     if (!recordScene) return;
-    const factor = positionProvider.scaleFactor;
     const points = [
-      new THREE.Vector3(x1 / factor, 0.08, z1 / factor),
-      new THREE.Vector3(x2 / factor, 0.08, z2 / factor),
+      new THREE.Vector3(x1, 0.08, z1),
+      new THREE.Vector3(x2, 0.08, z2),
     ];
     const geometry = new THREE.BufferGeometry().setFromPoints(points);
     const material = new THREE.LineBasicMaterial({ color: 0xa855f7, linewidth: 3 });
@@ -238,7 +174,7 @@ export default function ARRecordScene() {
     const pos = positionProvider.position.clone();
     const newCount = wpCountRef.current + 1;
     const newId = `W${newCount}`;
-    
+
     const newWp = {
       x: Number(pos.x.toFixed(3)),
       z: Number(pos.z.toFixed(3)),
@@ -298,7 +234,7 @@ export default function ARRecordScene() {
     const wpKeys = Object.keys(waypoints);
     // Exclude the starting point (W1) so we don't route to where we stand
     const availableWps = wpKeys.slice(1);
-    
+
     // Copy waypoints to modify their types without mutating React state during save
     const finalWaypoints = JSON.parse(JSON.stringify(waypoints));
 
@@ -308,7 +244,7 @@ export default function ARRecordScene() {
         // Spread destinations evenly across the available waypoints
         const index = Math.floor((i / Math.max(1, numStores - 1)) * (availableWps.length - 1));
         const wpId = availableWps[index];
-        
+
         if (!generatedDestinations.some(d => d.waypoint === wpId)) {
           generatedDestinations.push({
             id: `dest_${wpId}`,
@@ -352,30 +288,6 @@ export default function ARRecordScene() {
     <div ref={containerRef} className="absolute inset-0 w-full h-full bg-black overflow-hidden font-sans">
       <canvas id="camerafeed" className="absolute inset-0 w-full h-full object-cover"></canvas>
 
-      {/* แจ้งเตือนกล้องเอียง (Tilt Warning) */}
-      {(isPitchTooLow || isRollTooHigh) && (
-        <div className="absolute top-24 inset-x-6 z-50 bg-red-500/95 text-white p-4 rounded-2xl shadow-2xl border border-red-400 text-center animate-pulse pointer-events-auto">
-          <div className="font-bold text-lg">⚠️ กรุณาตั้งกล้องให้ตรง</div>
-          <div className="text-xs opacity-90 mt-1">
-            {isPitchTooLow && "หลีกเลี่ยงการก้มกล้องส่องพื้นใกล้ตัวเกินไป "}
-            {isRollTooHigh && "กรุณาถือโทรศัพท์ให้ตรงแนวตั้ง ไม่เอียงซ้าย/ขวา"}
-          </div>
-        </div>
-      )}
-
-      {/* แผงดีบักพิกัดสด (Debug Overlay) */}
-      {debugMode && (
-        <div className="absolute top-24 left-6 z-40 bg-black/70 backdrop-blur-md p-4 rounded-2xl border border-white/10 text-white text-[10px] font-mono shadow-xl flex flex-col gap-1 w-60 pointer-events-none">
-          <div className="font-bold text-purple-400 border-b border-white/10 pb-1 mb-1 text-xs">🔍 RECORD DEBUG PANEL</div>
-          <div>Raw SLAM: ({cameraRaw.x.toFixed(2)}, {cameraRaw.z.toFixed(2)})</div>
-          <div>Scaled: ({cameraScaled.x.toFixed(2)}, {cameraScaled.z.toFixed(2)})</div>
-          <div>Scale Factor: {scaleFactor.toFixed(3)}</div>
-          <div>Pitch (ก้ม/เงย): {pitch.toFixed(1)}° {isPitchTooLow ? "❌ (ก้มเกิน)" : "✅"}</div>
-          <div>Roll (ซ้าย/ขวา): {roll.toFixed(1)}° {isRollTooHigh ? "❌ (เอียงเกิน)" : "✅"}</div>
-          <div>Waypoints Count: {wpCount}</div>
-        </div>
-      )}
-
       {/* Top Left: Distance */}
       {recState === "recording" && (
         <div className="absolute top-6 left-6 z-40">
@@ -388,7 +300,7 @@ export default function ARRecordScene() {
 
       {/* Top Right: Hamburger Menu */}
       <div className="absolute top-6 right-6 z-50">
-        <button 
+        <button
           onClick={() => setShowMenu(!showMenu)}
           className="bg-black/40 backdrop-blur-md p-3 rounded-full border border-white/20 text-white shadow-lg active:scale-95 transition-transform"
         >
@@ -396,7 +308,7 @@ export default function ARRecordScene() {
         </button>
         {showMenu && (
           <div className="absolute top-14 right-0 mt-2 w-48 bg-slate-900/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2">
-            <button 
+            <button
               onClick={() => router.push("/dashboard")}
               className="w-full text-left px-4 py-4 text-white hover:bg-white/10 flex items-center gap-3 transition-colors"
             >
@@ -418,10 +330,10 @@ export default function ARRecordScene() {
 
       {/* Bottom Controls */}
       <div className="absolute bottom-10 left-0 right-0 z-40 px-8">
-        
+
         {recState === "idle" && (
           <div className="flex justify-center animate-in slide-in-from-bottom-10 fade-in duration-500">
-            <button 
+            <button
               onClick={startRecording}
               className="w-20 h-20 bg-red-500 rounded-full border-4 border-white shadow-[0_0_25px_rgba(239,68,68,0.6)] active:scale-90 transition-all flex items-center justify-center relative"
             >
@@ -433,10 +345,10 @@ export default function ARRecordScene() {
         {recState === "recording" && (
           <div className="flex items-center justify-between animate-in slide-in-from-bottom-10 fade-in duration-300">
             {/* Spacer for flex balance */}
-            <div className="w-16 h-16"></div> 
-            
+            <div className="w-16 h-16"></div>
+
             {/* Checkpoint Button (Center) */}
-            <button 
+            <button
               onClick={handleAddWaypoint}
               className="w-20 h-20 bg-purple-600 rounded-full border-4 border-white shadow-[0_0_20px_rgba(168,85,247,0.5)] active:scale-90 transition-all flex flex-col items-center justify-center text-white"
             >
@@ -444,7 +356,7 @@ export default function ARRecordScene() {
             </button>
 
             {/* Complete Button (Right) */}
-            <button 
+            <button
               onClick={() => {
                 if (wpCount < 2) {
                   alert("กรุณาบันทึก Checkpoint อย่างน้อย 1 จุดหลังจากจุดเริ่มต้น");
@@ -466,18 +378,18 @@ export default function ARRecordScene() {
           <div className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-xl font-bold text-slate-900">บันทึกเส้นทาง</h3>
-              <button 
+              <button
                 onClick={() => setShowSaveModal(false)}
                 className="p-2 rounded-full hover:bg-slate-100 text-slate-500 transition-colors"
               >
                 <X size={20} />
               </button>
             </div>
-            
+
             <div className="mb-6">
               <label className="block text-sm font-semibold text-slate-700 mb-2">ชื่อห้าง / สถานที่</label>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 autoFocus
                 value={mapName}
                 onChange={(e) => setMapName(e.target.value)}
@@ -487,13 +399,13 @@ export default function ARRecordScene() {
             </div>
 
             <div className="flex gap-3">
-              <button 
+              <button
                 onClick={() => setShowSaveModal(false)}
                 className="flex-1 py-3.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition-colors"
               >
                 ยกเลิก
               </button>
-              <button 
+              <button
                 onClick={handleSaveToDatabase}
                 disabled={isSubmitting}
                 className="flex-1 py-3.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold transition-colors disabled:opacity-50"

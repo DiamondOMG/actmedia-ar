@@ -17,7 +17,7 @@ export default function ARScene() {
   const containerRef = useRef<HTMLDivElement>(null);
   const searchParams = useSearchParams();
   const router = useRouter();
-  
+
   const [storeData, setStoreData] = useState<StoreData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false); // เริ่มปิดเมนู ให้เห็นลูกศรทันที
@@ -26,23 +26,6 @@ export default function ARScene() {
   const [trackingStatus, setTrackingStatus] = useState("NORMAL");
   const [xrStarted, setXrStarted] = useState(false);
   const [storesList, setStoresList] = useState<any[]>([]);
-
-  // --- DEBUG & TILT STATES ---
-  const [debugMode, setDebugMode] = useState(false);
-  const [pitch, setPitch] = useState(0);
-  const [roll, setRoll] = useState(0);
-  const [cameraRaw, setCameraRaw] = useState({ x: 0, y: 0, z: 0 });
-  const [cameraScaled, setCameraScaled] = useState({ x: 0, y: 0, z: 0 });
-  const [scaleFactor, setScaleFactor] = useState(1.7);
-  const [isPitchTooLow, setIsPitchTooLow] = useState(false);
-  const [isRollTooHigh, setIsRollTooHigh] = useState(false);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      setDebugMode(params.get("debug") === "true");
-    }
-  }, []);
 
   // ดึงแผนที่ทั้งหมดสำหรับปุ่มสลับแผนที่
   useEffect(() => {
@@ -98,14 +81,14 @@ export default function ARScene() {
         setTimeout(startAR, 500);
         return;
       }
-      
+
       // สำคัญมาก: 8th Wall ต้องการให้ Three.js อยู่บน global window
       if (!window.THREE) {
         window.THREE = THREE;
       }
-      
+
       setXrStarted(true);
-      
+
       XR8.addCameraPipelineModules([
         XR8.GlTextureRenderer.pipelineModule(),
         XR8.Threejs.pipelineModule(),
@@ -133,31 +116,6 @@ export default function ARScene() {
     if (!storeData) return;
     const interval = setInterval(() => {
       if (window.navDebug) setNavInfo({ ...window.navDebug });
-
-      // ดึงข้อมูลความเอียงและพิกัดดิบจาก window
-      if (window.xrCameraRot) {
-        const { pitch, roll } = window.xrCameraRot;
-        setPitch(pitch);
-        setRoll(roll);
-        setIsPitchTooLow(pitch < -45 || pitch > 25);
-        setIsRollTooHigh(Math.abs(roll) > 15);
-      }
-
-      if (window.xrCameraRawPos) {
-        setCameraRaw({
-          x: window.xrCameraRawPos.x,
-          y: window.xrCameraRawPos.y,
-          z: window.xrCameraRawPos.z
-        });
-      }
-
-      setCameraScaled({
-        x: positionProvider.position.x,
-        y: positionProvider.position.y,
-        z: positionProvider.position.z
-      });
-
-      setScaleFactor(positionProvider.scaleFactor);
     }, 100);
 
     const handleTracking = (e: any) => {
@@ -192,37 +150,6 @@ export default function ARScene() {
     <div ref={containerRef} className="absolute inset-0 w-full h-full bg-black overflow-hidden">
       <canvas id="camerafeed"></canvas>
 
-      {/* แจ้งเตือนกล้องเอียง (Tilt Warning) */}
-      {(isPitchTooLow || isRollTooHigh) && (
-        <div className="absolute top-24 inset-x-6 z-[150] bg-red-500/95 text-white p-4 rounded-2xl shadow-2xl border border-red-400 text-center animate-pulse pointer-events-auto">
-          <div className="font-bold text-lg">⚠️ กรุณาตั้งกล้องให้ตรง</div>
-          <div className="text-xs opacity-90 mt-1">
-            {isPitchTooLow && "หลีกเลี่ยงการก้มกล้องส่องพื้นใกล้ตัวเกินไป "}
-            {isRollTooHigh && "กรุณาถือโทรศัพท์ให้ตรงแนวตั้ง ไม่เอียงซ้าย/ขวา"}
-          </div>
-        </div>
-      )}
-
-      {/* แผงดีบักพิกัดสด (Debug Overlay) */}
-      {debugMode && (
-        <div className="absolute top-24 left-6 z-[140] bg-black/70 backdrop-blur-md p-4 rounded-2xl border border-white/10 text-white text-[10px] font-mono shadow-xl flex flex-col gap-1 w-60 pointer-events-none">
-          <div className="font-bold text-purple-400 border-b border-white/10 pb-1 mb-1 text-xs">🔍 NAVIGATE DEBUG PANEL</div>
-          <div>Raw SLAM: ({cameraRaw.x.toFixed(2)}, {cameraRaw.z.toFixed(2)})</div>
-          <div>Scaled: ({cameraScaled.x.toFixed(2)}, {cameraScaled.z.toFixed(2)})</div>
-          <div>Scale Factor: {scaleFactor.toFixed(3)}</div>
-          <div>Pitch (ก้ม/เงย): {pitch.toFixed(1)}° {isPitchTooLow ? "❌ (ก้มเกิน)" : "✅"}</div>
-          <div>Roll (ซ้าย/ขวา): {roll.toFixed(1)}° {isRollTooHigh ? "❌ (เอียงเกิน)" : "✅"}</div>
-          {navInfo && (
-            <>
-              <div className="border-t border-white/10 mt-1 pt-1 font-bold text-indigo-400">Navigation State</div>
-              <div>Target Waypoint: {navInfo.targetId || "None"}</div>
-              <div>Target Position: {navInfo.targetPos || "None"}</div>
-              <div>Distance: {navInfo.distance}m</div>
-            </>
-          )}
-        </div>
-      )}
-      
       {!xrStarted && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950 pointer-events-none z-10">
           <div className="absolute left-1/2 top-1/2 h-[300px] w-[300px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-purple-600/20 blur-[100px]" />
@@ -262,7 +189,7 @@ export default function ARScene() {
               </div>
             ) : <div />}
 
-            <button 
+            <button
               onClick={() => setIsMenuOpen(!isMenuOpen)}
               className="bg-black/80 backdrop-blur-md p-3 rounded-full text-white shadow-xl border border-white/20 mt-2 active:scale-95 transition-transform"
             >
@@ -288,7 +215,7 @@ export default function ARScene() {
               <div className="p-5 rounded-2xl backdrop-blur-xl shadow-2xl border border-white/20 bg-green-500/90 text-center">
                 <div className="text-3xl mb-1">🏁</div>
                 <h2 className="text-xl font-bold text-white">ยินดีด้วย! คุณถึงที่หมายแล้ว</h2>
-                <button 
+                <button
                   onClick={() => { setSelectedTarget(null); setIsMenuOpen(true) }}
                   className="mt-3 px-6 py-2 bg-white text-green-600 rounded-full font-bold text-sm"
                 >
@@ -298,9 +225,8 @@ export default function ARScene() {
             </div>
           )}
 
-          <div className={`absolute inset-0 bg-slate-900/95 backdrop-blur-xl pointer-events-auto transition-transform duration-300 ease-in-out flex flex-col ${
-            isMenuOpen ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0'
-          }`}>
+          <div className={`absolute inset-0 bg-slate-900/95 backdrop-blur-xl pointer-events-auto transition-transform duration-300 ease-in-out flex flex-col ${isMenuOpen ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0'
+            }`}>
             <div className="p-6 mt-16 overflow-y-auto pb-24">
               <h2 className="text-2xl font-bold text-white mb-6">เลือกร้านปลายทาง 🎯</h2>
 
@@ -320,11 +246,10 @@ export default function ARScene() {
                   <button
                     key={dest.waypoint}
                     onClick={() => handleSelectTarget(dest)}
-                    className={`flex items-center p-4 rounded-2xl transition-all border-2 text-left ${
-                      selectedTarget?.waypoint === dest.waypoint
+                    className={`flex items-center p-4 rounded-2xl transition-all border-2 text-left ${selectedTarget?.waypoint === dest.waypoint
                         ? 'bg-purple-600/30 border-purple-500 ring-2 ring-purple-500/50'
                         : 'bg-slate-800 border-slate-700 active:bg-slate-700'
-                    }`}
+                      }`}
                   >
                     <span className="text-3xl mr-4">{dest.icon || '🏪'}</span>
                     <div className="flex-1">
@@ -344,17 +269,16 @@ export default function ARScene() {
                       let wpCount = 0;
                       try {
                         wpCount = Object.keys(JSON.parse(store.waypointsJson)).length;
-                      } catch(e) {}
-                      
+                      } catch (e) { }
+
                       return (
                         <a
                           key={store.id}
                           href={`/ar?store=${store.id}`}
-                          className={`flex items-center p-4 rounded-2xl transition-all border-2 text-left ${
-                            storeData?.store_id === store.id
+                          className={`flex items-center p-4 rounded-2xl transition-all border-2 text-left ${storeData?.store_id === store.id
                               ? 'bg-purple-600/30 border-purple-500 ring-2 ring-purple-500/50'
                               : 'bg-slate-800 border-slate-700 active:bg-slate-700'
-                          }`}
+                            }`}
                         >
                           <span className="text-3xl mr-4">🗺️</span>
                           <div className="flex-1">
