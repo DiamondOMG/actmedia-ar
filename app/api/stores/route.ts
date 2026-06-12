@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { db } from "../../../lib/db";
-import { stores } from "../../../lib/schema";
+import { db } from "@/lib/db";
+import { stores } from "@/lib/schema";
 import { auth } from "@clerk/nextjs/server";
 
 // ดึงรายการแผนที่ทั้งหมด (สำหรับเบอร์เกอร์เมนู)

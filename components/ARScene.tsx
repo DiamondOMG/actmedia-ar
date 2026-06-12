@@ -2,9 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { loadStoreData, StoreData } from "../lib/store-loader";
-import { positionProvider } from "../lib/position-provider";
-import { initScenePipelineModule } from "../lib/scene-init";
+import { loadStoreData, StoreData } from "@/lib/store-loader";
+import { positionProvider } from "@/lib/position-provider";
+import { initScenePipelineModule } from "@/lib/scene-init";
 import { Menu, X, MapPin, Home } from "lucide-react";
 
 import * as THREE from "three";

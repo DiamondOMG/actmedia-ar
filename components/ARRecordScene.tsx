@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { positionProvider } from "../lib/position-provider";
+import { positionProvider } from "@/lib/position-provider";
 import {
   Menu,
   MapPin,
