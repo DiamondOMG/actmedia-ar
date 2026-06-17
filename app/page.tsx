@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { auth } from "@clerk/nextjs/server";
 import { Navigation, LogIn, UserPlus, ArrowRight, MapPin, Compass, Layers } from "lucide-react";
-import NavbarUser from "../components/NavbarUser";
+import NavbarUser from "@/components/NavbarUser";
 
 export default async function Home() {
   const { userId } = await auth();

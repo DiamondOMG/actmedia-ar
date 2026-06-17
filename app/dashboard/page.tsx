@@ -1,10 +1,10 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import NavbarUser from "../../components/NavbarUser";
+import NavbarUser from "@/components/NavbarUser";
 import { Navigation, Plus, Map, Settings, BarChart3, ArrowRight } from "lucide-react";
-import { db } from "../../lib/db";
-import { stores } from "../../lib/schema";
+import { db } from "@/lib/db";
+import { stores } from "@/lib/schema";
 import { eq } from "drizzle-orm";
 
 export default async function DashboardPage() {
