@@ -15,6 +15,7 @@ export class PositionProvider {
   public corrections: PositionCorrection[];
   public nav_target_id: string | null;
   public nav_debug: any | null;
+  public is_calibrated: boolean;
   
   private _listeners: Record<string, Function[]>;
   private _layers: Map<string, any>;
@@ -26,6 +27,7 @@ export class PositionProvider {
     this.scaleFactor = 1.0;
     this.nav_target_id = null;
     this.nav_debug = null;
+    this.is_calibrated = false;
 
     this._listeners = {
       positionUpdate: [],

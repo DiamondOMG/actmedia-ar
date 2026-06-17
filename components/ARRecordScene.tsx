@@ -85,6 +85,14 @@ export default function ARRecordScene() {
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [mapName, setMapName] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [initial_heading_deg, set_initial_heading_deg] = useState(0);
+  const [show_direction_modal, set_show_direction_modal] = useState(false);
+
+  const confirm_direction = (deg: number) => {
+    set_initial_heading_deg(deg);
+    set_show_direction_modal(false);
+    startRecording();
+  };
 
   // References for interval usage
   const recStateRef = useRef(recState);
@@ -266,7 +274,7 @@ export default function ARRecordScene() {
       id: mapId,
       name: mapName,
       floor: 1,
-      initialHeadingDeg: 0,
+      initialHeadingDeg: initial_heading_deg,
       proximityRadiusM: 1.5,
       waypointsJson: JSON.stringify(finalWaypoints),
       edgesJson: JSON.stringify(edges),
@@ -338,7 +346,7 @@ export default function ARRecordScene() {
         {recState === "idle" && (
           <div className="flex justify-center animate-in slide-in-from-bottom-10 fade-in duration-500">
             <button
-              onClick={startRecording}
+              onClick={() => set_show_direction_modal(true)}
               className="w-20 h-20 bg-red-500 rounded-full border-4 border-white shadow-[0_0_25px_rgba(239,68,68,0.6)] active:scale-90 transition-all flex items-center justify-center relative"
             >
               <div className="absolute inset-0 rounded-full border border-white/50 animate-ping"></div>
@@ -417,6 +425,56 @@ export default function ARRecordScene() {
                 {isSubmitting ? "รอสักครู่..." : "OK"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Direction Selection Modal */}
+      {show_direction_modal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md px-6 font-sans">
+          <div className="bg-slate-900 border border-white/10 rounded-3xl w-full max-w-sm p-6 shadow-2xl animate-in zoom-in-95 duration-200 text-white">
+            <h3 className="text-xl font-bold mb-2">เลือกทิศทางเริ่มต้น 🗺️</h3>
+            <p className="text-sm text-slate-400 mb-6 font-medium">
+              เลือกทิศทางที่ต้องการให้ลูกศรชี้ไปตอนเริ่มต้นนำทาง (เทียบกับหน้าป้าย QR Code)
+            </p>
+
+            <div className="grid grid-cols-2 gap-3 mb-6 font-bold">
+              <button
+                onClick={() => confirm_direction(0)}
+                className="py-4 px-3 rounded-2xl bg-slate-800 hover:bg-purple-600 border border-white/5 active:scale-95 transition-all text-center flex flex-col items-center justify-center gap-2"
+              >
+                <span className="text-2xl">⬆️</span>
+                <span className="text-sm">ตรงไป (0°)</span>
+              </button>
+              <button
+                onClick={() => confirm_direction(90)}
+                className="py-4 px-3 rounded-2xl bg-slate-800 hover:bg-purple-600 border border-white/5 active:scale-95 transition-all text-center flex flex-col items-center justify-center gap-2"
+              >
+                <span className="text-2xl">➡️</span>
+                <span className="text-sm">เลี้ยวขวา (90°)</span>
+              </button>
+              <button
+                onClick={() => confirm_direction(-90)}
+                className="py-4 px-3 rounded-2xl bg-slate-800 hover:bg-purple-600 border border-white/5 active:scale-95 transition-all text-center flex flex-col items-center justify-center gap-2"
+              >
+                <span className="text-2xl">⬅️</span>
+                <span className="text-sm">เลี้ยวซ้าย (-90°)</span>
+              </button>
+              <button
+                onClick={() => confirm_direction(180)}
+                className="py-4 px-3 rounded-2xl bg-slate-800 hover:bg-purple-600 border border-white/5 active:scale-95 transition-all text-center flex flex-col items-center justify-center gap-2"
+              >
+                <span className="text-2xl">⬇️</span>
+                <span className="text-sm">กลับหลัง (180°)</span>
+              </button>
+            </div>
+
+            <button
+              onClick={() => set_show_direction_modal(false)}
+              className="w-full py-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold transition-all text-sm"
+            >
+              ยกเลิก
+            </button>
           </div>
         </div>
       )}
