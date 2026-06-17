@@ -101,6 +101,10 @@ export default function ARRecordScene() {
     let isMounted = true;
     recordScene = null;
 
+    // รีเซ็ตทิศทางและสเกลเป็นค่าเริ่มต้นเสมอ
+    positionProvider.setHeadingOffset(0);
+    positionProvider.scaleFactor = 1.0;
+
     const startAR = () => {
       if (typeof window === "undefined") return;
       if (typeof XR8 === "undefined" || typeof XRExtras === "undefined") {

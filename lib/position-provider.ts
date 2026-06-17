@@ -26,22 +26,6 @@ export class PositionProvider {
     this.scaleFactor = 1.0;
     this.nav_target_id = null;
     this.nav_debug = null;
-    
-    // โหลดค่า Scale Factor จาก localStorage ถ้าอยู่ในฝั่ง Client
-    if (typeof window !== "undefined") {
-      try {
-        const savedScale = localStorage.getItem("ar_scale_factor");
-        if (savedScale) {
-          const parsed = parseFloat(savedScale);
-          if (!isNaN(parsed) && parsed > 0) {
-            this.scaleFactor = parsed;
-            console.log(`[PositionProvider] Loaded saved scaleFactor: ${parsed}`);
-          }
-        }
-      } catch (e) {
-        console.error("[PositionProvider] Failed to load ar_scale_factor:", e);
-      }
-    }
 
     this._listeners = {
       positionUpdate: [],

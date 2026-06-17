@@ -71,7 +71,7 @@ const initCalibratePipelineModule = (onUpdateCb: () => void) => {
       if (!camera) return;
 
       rawCameraPos.copy(camera.position);
-      
+
       // อัปเดตพิกัดลง positionProvider ตามปกติ
       positionProvider.updateFromSlam(camera.position, camera.quaternion);
 
@@ -89,15 +89,7 @@ export default function ARCalibrateScene() {
   const [scaleFactor, setScaleFactor] = useState(1.0);
   const [showInstruction, setShowInstruction] = useState(true);
 
-  // โหลดค่า scaleFactor ล่าสุดจาก localStorage
-  useEffect(() => {
-    const savedScale = localStorage.getItem("ar_scale_factor");
-    if (savedScale) {
-      const scale = parseFloat(savedScale);
-      setScaleFactor(scale);
-      positionProvider.scaleFactor = scale;
-    }
-  }, []);
+
 
   useEffect(() => {
     let isMounted = true;
@@ -114,7 +106,7 @@ export default function ARCalibrateScene() {
 
       const updateUI = () => {
         if (!isMounted) return;
-        
+
         // คำนวณระยะห่างทางราบ (X, Z) จากจุดเริ่มต้นของการ Calibrate (หลังกดรีเซ็ต)
         const dx = rawCameraPos.x - startPos.x;
         const dz = rawCameraPos.z - startPos.z;
@@ -163,12 +155,10 @@ export default function ARCalibrateScene() {
     if (isNaN(factor) || factor <= 0) return;
     setScaleFactor(factor);
     positionProvider.scaleFactor = factor;
-    localStorage.setItem("ar_scale_factor", factor.toString());
   };
 
   const handleSaveAndExit = () => {
-    localStorage.setItem("ar_scale_factor", scaleFactor.toString());
-    alert(`บันทึก Scale Factor: ${scaleFactor.toFixed(4)} เรียบร้อยแล้ว!`);
+    alert(`ผลการคำนวณ Scale Factor: ${scaleFactor.toFixed(4)} (กรุณานำตัวเลขนี้ไปฮาร์ดโค้ดในโปรเจคตามต้องการ)`);
     router.push("/dashboard");
   };
 
@@ -232,7 +222,7 @@ export default function ARCalibrateScene() {
 
       {/* บอร์ดแสดงผลข้อมูลการวัดระยะ */}
       <div className="absolute bottom-6 inset-x-6 z-40 bg-slate-900/90 backdrop-blur-xl border border-white/10 rounded-3xl p-6 shadow-2xl flex flex-col gap-5">
-        
+
         {/* แถบตัวเลขระยะทาง */}
         <div className="grid grid-cols-2 gap-4">
           <div className="bg-white/5 border border-white/5 rounded-2xl p-4 text-center">
