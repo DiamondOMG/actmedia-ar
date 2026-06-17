@@ -5,7 +5,6 @@ import { findShortestPath, getDistance } from './navigation';
 import { StoreData } from './store-loader';
 
 declare const XR8: any;
-declare const window: any;
 
 export const initScenePipelineModule = (storeData: StoreData | null) => {
   let navArrow: NavigationArrow | null = null;
@@ -29,7 +28,7 @@ export const initScenePipelineModule = (storeData: StoreData | null) => {
     navArrow = new NavigationArrow(scene, { color: '#AD50FF', animation: 'bounce' });
 
     if (storeData) {
-      const targetId = window.navTargetId || 'W5';
+      const targetId = positionProvider.nav_target_id || 'W5';
       const path = findShortestPath(storeData.waypoints, storeData.edges, 'W1', targetId);
       if (path) {
         currentPath = path;
@@ -83,8 +82,8 @@ export const initScenePipelineModule = (storeData: StoreData | null) => {
       positionProvider.updateFromSlam(camera.position, camera.quaternion);
 
       // Update target if user picked a new destination dynamically
-      if (storeData && window.navTargetId && currentPath.length > 0 && currentPath[currentPath.length - 1] !== window.navTargetId) {
-        const newPath = findShortestPath(storeData.waypoints, storeData.edges, 'W1', window.navTargetId);
+      if (storeData && positionProvider.nav_target_id && currentPath.length > 0 && currentPath[currentPath.length - 1] !== positionProvider.nav_target_id) {
+        const newPath = findShortestPath(storeData.waypoints, storeData.edges, 'W1', positionProvider.nav_target_id);
         if (newPath) {
           currentPath = newPath;
           currentWaypointIndex = 1;
@@ -107,7 +106,7 @@ export const initScenePipelineModule = (storeData: StoreData | null) => {
             targetWaypoint
           );
 
-          window.navDebug = {
+          positionProvider.nav_debug = {
             targetId: currentTargetId,
             targetPos: `(${targetWaypoint.x}, ${targetWaypoint.z})`,
             distance: dist.toFixed(2),
@@ -121,7 +120,7 @@ export const initScenePipelineModule = (storeData: StoreData | null) => {
               currentWaypointIndex++;
             } else {
               isArrived = true;
-              if (window.navDebug) window.navDebug.isArrived = true;
+              if (positionProvider.nav_debug) positionProvider.nav_debug.isArrived = true;
             }
           }
 

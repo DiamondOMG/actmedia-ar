@@ -13,6 +13,8 @@ export class PositionProvider {
   public headingOffsetRad: number;
   public scaleFactor: number; // อัตราส่วนสเกลเพื่อปรับชดเชยระยะทางจริงกับ SLAM (ค่าเริ่มต้น 1.0)
   public corrections: PositionCorrection[];
+  public nav_target_id: string | null;
+  public nav_debug: any | null;
   
   private _listeners: Record<string, Function[]>;
   private _layers: Map<string, any>;
@@ -22,6 +24,8 @@ export class PositionProvider {
     this.quaternion = new THREE.Quaternion();
     this.headingOffsetRad = 0;
     this.scaleFactor = 1.0;
+    this.nav_target_id = null;
+    this.nav_debug = null;
     
     // โหลดค่า Scale Factor จาก localStorage ถ้าอยู่ในฝั่ง Client
     if (typeof window !== "undefined") {

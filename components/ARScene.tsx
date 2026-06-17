@@ -59,7 +59,7 @@ export default function ARScene() {
           const defaultIndex = Math.min(4, data.destinations.length - 1);
           const defaultDest = data.destinations[defaultIndex];
           setSelectedTarget(defaultDest);
-          window.navTargetId = defaultDest.waypoint;
+          positionProvider.nav_target_id = defaultDest.waypoint;
         }
       })
       .catch((err) => {
@@ -115,7 +115,7 @@ export default function ARScene() {
   useEffect(() => {
     if (!storeData) return;
     const interval = setInterval(() => {
-      if (window.navDebug) setNavInfo({ ...window.navDebug });
+      if (positionProvider.nav_debug) setNavInfo({ ...positionProvider.nav_debug });
     }, 100);
 
     const handleTracking = (e: any) => {
@@ -131,7 +131,7 @@ export default function ARScene() {
 
   const handleSelectTarget = (dest: any) => {
     setSelectedTarget(dest);
-    window.navTargetId = dest.waypoint;
+    positionProvider.nav_target_id = dest.waypoint;
     setIsMenuOpen(false);
   };
 
