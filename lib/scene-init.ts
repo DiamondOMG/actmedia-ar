@@ -91,11 +91,7 @@ export const initScenePipelineModule = (storeData: StoreData | null) => {
         }
       }
 
-      if (navArrow) {
-        navArrow.mesh.visible = positionProvider.is_calibrated;
-      }
-
-      if (positionProvider.is_calibrated && navArrow && currentPath && currentPath.length > 0 && !isArrived) {
+      if (navArrow && currentPath && currentPath.length > 0 && !isArrived) {
         const delta = clock.getDelta();
         const currentTargetId = currentPath[currentWaypointIndex];
         const targetWaypoint = storeData?.waypoints[currentTargetId];

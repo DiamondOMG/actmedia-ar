@@ -26,32 +26,6 @@ export default function ARScene() {
   const [trackingStatus, setTrackingStatus] = useState("NORMAL");
   const [xrStarted, setXrStarted] = useState(false);
   const [storesList, setStoresList] = useState<any[]>([]);
-  const [show_calibration, set_show_calibration] = useState(false);
-  const [calibration_countdown, set_calibration_countdown] = useState<number | null>(null);
-
-  useEffect(() => {
-    // รีเซ็ตสถานะการตั้งค่าพิกัดนำทาง
-    positionProvider.is_calibrated = false;
-  }, []);
-
-  useEffect(() => {
-    if (!xrStarted) return;
-
-    set_show_calibration(true);
-    set_calibration_countdown(1);
-
-    const timer = setTimeout(() => {
-      if (typeof XR8 !== "undefined") {
-        XR8.XrController.recenter();
-        console.log("[ARScene] Recentered camera at start.");
-      }
-      positionProvider.is_calibrated = true;
-      set_show_calibration(false);
-      set_calibration_countdown(null);
-    }, 1000);
-
-    return () => clearTimeout(timer);
-  }, [xrStarted]);
 
   // ดึงแผนที่ทั้งหมดสำหรับปุ่มสลับแผนที่
   useEffect(() => {
@@ -188,21 +162,6 @@ export default function ARScene() {
         </div>
       )}
 
-      {show_calibration && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 backdrop-blur-md z-[90] font-sans">
-          <div className="bg-slate-900/90 border border-white/10 rounded-3xl p-6 max-w-xs text-center shadow-2xl animate-in zoom-in-95 duration-200">
-            <div className="text-4xl mb-3">📱</div>
-            <h3 className="text-lg font-bold text-white mb-2">กรุณาถือกล้องนิ่งๆ</h3>
-            <p className="text-xs text-slate-400 mb-4 font-medium">
-              ส่องกล้องไปทางป้าย QR Code ค้างไว้เพื่อเปิดการนำทาง
-            </p>
-            <div className="text-3xl font-black text-purple-400 font-mono">
-              {calibration_countdown}
-            </div>
-          </div>
-        </div>
-      )}
-
       {storeData && (
         <div className="absolute inset-0 pointer-events-none font-sans z-[100]">
           <div className="absolute top-0 left-0 right-0 p-4 pointer-events-auto flex justify-between items-start">
@@ -288,8 +247,8 @@ export default function ARScene() {
                     key={dest.waypoint}
                     onClick={() => handleSelectTarget(dest)}
                     className={`flex items-center p-4 rounded-2xl transition-all border-2 text-left ${selectedTarget?.waypoint === dest.waypoint
-                        ? 'bg-purple-600/30 border-purple-500 ring-2 ring-purple-500/50'
-                        : 'bg-slate-800 border-slate-700 active:bg-slate-700'
+                      ? 'bg-purple-600/30 border-purple-500 ring-2 ring-purple-500/50'
+                      : 'bg-slate-800 border-slate-700 active:bg-slate-700'
                       }`}
                   >
                     <span className="text-3xl mr-4">{dest.icon || '🏪'}</span>
@@ -317,8 +276,8 @@ export default function ARScene() {
                           key={store.id}
                           href={`/ar?store=${store.id}`}
                           className={`flex items-center p-4 rounded-2xl transition-all border-2 text-left ${storeData?.store_id === store.id
-                              ? 'bg-purple-600/30 border-purple-500 ring-2 ring-purple-500/50'
-                              : 'bg-slate-800 border-slate-700 active:bg-slate-700'
+                            ? 'bg-purple-600/30 border-purple-500 ring-2 ring-purple-500/50'
+                            : 'bg-slate-800 border-slate-700 active:bg-slate-700'
                             }`}
                         >
                           <span className="text-3xl mr-4">🗺️</span>

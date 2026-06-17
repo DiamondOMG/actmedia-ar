@@ -67,7 +67,7 @@ const initRecordPipelineModule = () => {
   };
 };
 
-type RecordState = "idle" | "countdown" | "recording" | "waiting_for_turn";
+type RecordState = "idle" | "countdown" | "recording";
 
 export default function ARRecordScene() {
   const router = useRouter();
@@ -85,27 +85,11 @@ export default function ARRecordScene() {
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [mapName, setMapName] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [initial_heading_deg, set_initial_heading_deg] = useState(0);
-  const [show_direction_modal, set_show_direction_modal] = useState(false);
-  const [show_action_modal, set_show_action_modal] = useState(false);
-  const [pending_turn_deg, set_pending_turn_deg] = useState(0);
-  const [pending_turn_label, set_pending_turn_label] = useState("");
-
-  const confirm_direction = (deg: number) => {
-    set_initial_heading_deg(deg);
-    set_show_direction_modal(false);
-    startRecording();
-  };
 
   // References for interval usage
   const recStateRef = useRef(recState);
   const wpCountRef = useRef(wpCount);
   const waypointsRef = useRef(waypoints);
-
-  // Refs สำหรับวัดระยะทางแบบ Snapped Grid
-  const leg_start_raw_pos_ref = useRef(new THREE.Vector3(0, 0, 0));
-  const leg_start_waypoint_ref = useRef({ x: 0, z: 0 });
-  const current_heading_deg_ref = useRef(0);
 
   useEffect(() => {
     recStateRef.current = recState;
@@ -144,10 +128,14 @@ export default function ARRecordScene() {
     startAR();
 
     const interval = setInterval(() => {
-      const is_rec = recStateRef.current === "recording" || recStateRef.current === "waiting_for_turn";
-      if (is_rec && wpCountRef.current > 0) {
-        const dist = positionProvider.position.distanceTo(leg_start_raw_pos_ref.current);
-        setDistanceToLast(dist);
+      if (recStateRef.current === "recording" && wpCountRef.current > 0) {
+        const lastWp = waypointsRef.current[`W${wpCountRef.current}`];
+        if (lastWp) {
+          const currentPos = positionProvider.position;
+          const lastVec = new THREE.Vector3(lastWp.x, currentPos.y, lastWp.z);
+          const dist = currentPos.distanceTo(lastVec);
+          setDistanceToLast(dist);
+        }
       }
     }, 150);
 
@@ -186,88 +174,31 @@ export default function ARRecordScene() {
     recordScene.add(line);
   };
 
-  const handle_add_first_waypoint = () => {
-    const newCount = 1;
-    const newId = `W${newCount}`;
-    const newWp = {
-      x: 0,
-      z: 0,
-      label: "จุดเริ่มต้น",
-      type: "turn",
-    };
-    setWaypoints({ [newId]: newWp });
-    addMarker3D(0, 0);
-    setWpCount(newCount);
-  };
-
-  const handle_select_action = (action: string) => {
-    set_show_action_modal(false);
-    
-    // 1. คำนวณระยะทางที่เดินจริงในใจจากกล้องเทียบกับจุดตั้งต้น Leg
-    const dist = positionProvider.position.distanceTo(leg_start_raw_pos_ref.current);
-    
-    // 2. แตกพิกัดแบบ Snap ล็อคแกนมุมฉาก 90 องศาอิงตามเข็มกริดนำทาง
-    const rad = THREE.MathUtils.degToRad(current_heading_deg_ref.current);
-    const new_x = Number((leg_start_waypoint_ref.current.x + dist * Math.sin(rad)).toFixed(3));
-    const new_z = Number((leg_start_waypoint_ref.current.z - dist * Math.cos(rad)).toFixed(3));
-    
+  const handleAddWaypoint = () => {
+    const pos = positionProvider.position.clone();
     const newCount = wpCountRef.current + 1;
     const newId = `W${newCount}`;
-    const prevId = `W${wpCountRef.current}`;
-    
+
     const newWp = {
-      x: new_x,
-      z: new_z,
-      label: action === "straight" ? `จุดที่ ${newCount}` : `จุดเลี้ยวที่ ${newCount}`,
+      x: Number(pos.x.toFixed(3)),
+      z: Number(pos.z.toFixed(3)),
+      label: `จุดที่ ${newCount}`,
       type: "turn",
     };
-    
-    // บันทึกลงสถานะแผนที่
-    setWaypoints(prev => ({ ...prev, [newId]: newWp }));
-    setEdges(prev => [...prev, [prevId, newId]]);
-    
-    // วาดหมุดและเส้นเชื่อมสีม่วง
-    addLine3D(leg_start_waypoint_ref.current.x, leg_start_waypoint_ref.current.z, new_x, new_z);
-    addMarker3D(new_x, new_z);
-    setWpCount(newCount);
-    
-    if (action === "straight") {
-      // เดินตรงไปต่อ: ตั้งจุดอ้างอิงของ Leg ถัดไปจากตำแหน่งและจุดมาร์คล่าสุด
-      leg_start_raw_pos_ref.current.copy(positionProvider.position);
-      leg_start_waypoint_ref.current = newWp;
-    } else {
-      // เตรียมเลี้ยว: ค้างการบันทึกชั่วคราวและกำหนดข้อมูลมุมเลี้ยว
-      let deg = 0;
-      let label = "";
-      if (action === "turn_right") { deg = 90; label = "ขวา"; }
-      else if (action === "turn_left") { deg = -90; label = "ซ้าย"; }
-      else if (action === "turn_back") { deg = 180; label = "หลัง"; }
-      
-      set_pending_turn_deg(deg);
-      set_pending_turn_label(label);
-      setRecState("waiting_for_turn");
-      
-      // ล็อคพิกัดมาร์คตัวเลี้ยวไว้ใช้คำนวณ Leg ถัดไป
-      leg_start_waypoint_ref.current = newWp;
-    }
-  };
 
-  const handle_confirm_turn_and_resume = () => {
-    // 1. อัปเดตเข็มกริดนำทาง (ล็อคมุม 90 องศา)
-    const new_deg = (current_heading_deg_ref.current + pending_turn_deg + 360) % 360;
-    current_heading_deg_ref.current = new_deg;
-    
-    // 2. สั่งรีเซ็ตแกนกล้องใหม่ เพื่อให้นับทิศทางเดินตรงถัดไปจาก 0,0,0
-    if (typeof XR8 !== "undefined") {
-      XR8.XrController.recenter();
+    setWaypoints(prev => ({ ...prev, [newId]: newWp }));
+
+    if (newCount > 1) {
+      const prevId = `W${newCount - 1}`;
+      const prevWp = waypointsRef.current[prevId];
+      if (prevWp) {
+        setEdges(prev => [...prev, [prevId, newId]]);
+        addLine3D(prevWp.x, prevWp.z, newWp.x, newWp.z);
+      }
     }
-    
-    // 3. เริ่มต้นพิกัด Leg ใหม่หลังจากหันหน้าตรงตามทิศใหม่แล้ว
-    leg_start_raw_pos_ref.current.set(0, 0, 0);
-    
-    set_pending_turn_deg(0);
-    set_pending_turn_label("");
-    setRecState("recording");
+
+    addMarker3D(newWp.x, newWp.z);
+    setWpCount(newCount);
   };
 
   const startRecording = () => {
@@ -280,18 +211,8 @@ export default function ARRecordScene() {
         setCountdown(count);
       } else {
         clearInterval(iv);
-        
-        // บังคับ Recentering เพื่อให้แกน Z หน้ากล้องมีค่าพิกัดเริ่มต้นเป็น 0 เสมอ
-        if (typeof XR8 !== "undefined") {
-          XR8.XrController.recenter();
-        }
-        
-        current_heading_deg_ref.current = 0;
-        leg_start_raw_pos_ref.current.set(0, 0, 0);
-        leg_start_waypoint_ref.current = { x: 0, z: 0 };
-        
         setRecState("recording");
-        handle_add_first_waypoint(); // สร้างจุด W1 ที่ (0, 0)
+        handleAddWaypoint(); // Auto add starting point
       }
     }, 1000);
   };
@@ -345,7 +266,7 @@ export default function ARRecordScene() {
       id: mapId,
       name: mapName,
       floor: 1,
-      initialHeadingDeg: initial_heading_deg,
+      initialHeadingDeg: 0,
       proximityRadiusM: 1.5,
       waypointsJson: JSON.stringify(finalWaypoints),
       edgesJson: JSON.stringify(edges),
@@ -417,7 +338,7 @@ export default function ARRecordScene() {
         {recState === "idle" && (
           <div className="flex justify-center animate-in slide-in-from-bottom-10 fade-in duration-500">
             <button
-              onClick={() => set_show_direction_modal(true)}
+              onClick={startRecording}
               className="w-20 h-20 bg-red-500 rounded-full border-4 border-white shadow-[0_0_25px_rgba(239,68,68,0.6)] active:scale-90 transition-all flex items-center justify-center relative"
             >
               <div className="absolute inset-0 rounded-full border border-white/50 animate-ping"></div>
@@ -432,7 +353,7 @@ export default function ARRecordScene() {
 
             {/* Checkpoint Button (Center) */}
             <button
-              onClick={() => set_show_action_modal(true)}
+              onClick={handleAddWaypoint}
               className="w-20 h-20 bg-purple-600 rounded-full border-4 border-white shadow-[0_0_20px_rgba(168,85,247,0.5)] active:scale-90 transition-all flex flex-col items-center justify-center text-white"
             >
               <MapPin size={28} />
@@ -496,137 +417,6 @@ export default function ARRecordScene() {
                 {isSubmitting ? "รอสักครู่..." : "OK"}
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Direction Selection Modal */}
-      {show_direction_modal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md px-6 font-sans">
-          <div className="bg-slate-900 border border-white/10 rounded-3xl w-full max-w-sm p-6 shadow-2xl animate-in zoom-in-95 duration-200 text-white">
-            <h3 className="text-xl font-bold mb-2">เลือกทิศทางเริ่มต้น 🗺️</h3>
-            <p className="text-sm text-slate-400 mb-6 font-medium">
-              เลือกทิศทางที่ต้องการให้ลูกศรชี้ไปตอนเริ่มต้นนำทาง (เทียบกับหน้าป้าย QR Code)
-            </p>
-
-            <div className="grid grid-cols-2 gap-3 mb-6 font-bold">
-              <button
-                onClick={() => confirm_direction(0)}
-                className="py-4 px-3 rounded-2xl bg-slate-800 hover:bg-purple-600 border border-white/5 active:scale-95 transition-all text-center flex flex-col items-center justify-center gap-2"
-              >
-                <span className="text-2xl">⬆️</span>
-                <span className="text-sm">ตรงไป (0°)</span>
-              </button>
-              <button
-                onClick={() => confirm_direction(90)}
-                className="py-4 px-3 rounded-2xl bg-slate-800 hover:bg-purple-600 border border-white/5 active:scale-95 transition-all text-center flex flex-col items-center justify-center gap-2"
-              >
-                <span className="text-2xl">➡️</span>
-                <span className="text-sm">เลี้ยวขวา (90°)</span>
-              </button>
-              <button
-                onClick={() => confirm_direction(-90)}
-                className="py-4 px-3 rounded-2xl bg-slate-800 hover:bg-purple-600 border border-white/5 active:scale-95 transition-all text-center flex flex-col items-center justify-center gap-2"
-              >
-                <span className="text-2xl">⬅️</span>
-                <span className="text-sm">เลี้ยวซ้าย (-90°)</span>
-              </button>
-              <button
-                onClick={() => confirm_direction(180)}
-                className="py-4 px-3 rounded-2xl bg-slate-800 hover:bg-purple-600 border border-white/5 active:scale-95 transition-all text-center flex flex-col items-center justify-center gap-2"
-              >
-                <span className="text-2xl">⬇️</span>
-                <span className="text-sm">กลับหลัง (180°)</span>
-              </button>
-            </div>
-
-            <button
-              onClick={() => set_show_direction_modal(false)}
-              className="w-full py-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold transition-all text-sm"
-            >
-              ยกเลิก
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Action Selection Modal */}
-      {show_action_modal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md px-6 font-sans">
-          <div className="bg-slate-900 border border-white/10 rounded-3xl w-full max-w-sm p-6 shadow-2xl animate-in zoom-in-95 duration-200 text-white">
-            <h3 className="text-xl font-bold mb-2">มาร์คจุดนำทาง 📌</h3>
-            <p className="text-sm text-slate-400 mb-6 font-medium">
-              เลือกทิศทางการเดินถัดไปของคุณจากจุดนี้
-            </p>
-
-            <div className="grid grid-cols-1 gap-3 mb-6 font-bold">
-              <button
-                onClick={() => handle_select_action("straight")}
-                className="py-3.5 px-4 rounded-2xl bg-slate-800 hover:bg-purple-600 border border-white/5 active:scale-95 transition-all text-left flex items-center gap-3"
-              >
-                <span className="text-2xl">⬆️</span>
-                <div>
-                  <div className="text-sm">เดินตรงไปต่อ (บันทึกจุดตรง)</div>
-                  <div className="text-[10px] text-slate-400 font-normal">มาร์คจุดอ้างอิงตรงทางยาว</div>
-                </div>
-              </button>
-              <button
-                onClick={() => handle_select_action("turn_right")}
-                className="py-3.5 px-4 rounded-2xl bg-slate-800 hover:bg-purple-600 border border-white/5 active:scale-95 transition-all text-left flex items-center gap-3"
-              >
-                <span className="text-2xl">➡️</span>
-                <div>
-                  <div className="text-sm">เลี้ยวขวา (90°)</div>
-                  <div className="text-[10px] text-slate-400 font-normal">บันทึกจุดเลี้ยวและกดยืนยันการเลี้ยว</div>
-                </div>
-              </button>
-              <button
-                onClick={() => handle_select_action("turn_left")}
-                className="py-3.5 px-4 rounded-2xl bg-slate-800 hover:bg-purple-600 border border-white/5 active:scale-95 transition-all text-left flex items-center gap-3"
-              >
-                <span className="text-2xl">⬅️</span>
-                <div>
-                  <div className="text-sm">เลี้ยวซ้าย (-90°)</div>
-                  <div className="text-[10px] text-slate-400 font-normal">บันทึกจุดเลี้ยวและกดยืนยันการเลี้ยว</div>
-                </div>
-              </button>
-              <button
-                onClick={() => handle_select_action("turn_back")}
-                className="py-3.5 px-4 rounded-2xl bg-slate-800 hover:bg-purple-600 border border-white/5 active:scale-95 transition-all text-left flex items-center gap-3"
-              >
-                <span className="text-2xl">⬇️</span>
-                <div>
-                  <div className="text-sm">กลับหลัง (180°)</div>
-                  <div className="text-[10px] text-slate-400 font-normal">บันทึกจุดเลี้ยวและหันกลับหลังหัน</div>
-                </div>
-              </button>
-            </div>
-
-            <button
-              onClick={() => set_show_action_modal(false)}
-              className="w-full py-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold transition-all text-sm"
-            >
-              ยกเลิก
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Turn Confirmation Panel */}
-      {recState === "waiting_for_turn" && (
-        <div className="absolute inset-x-6 bottom-10 z-[80] font-sans">
-          <div className="bg-slate-900/90 border border-purple-500/30 rounded-3xl p-5 text-center shadow-2xl backdrop-blur-md animate-in slide-in-from-bottom-10 fade-in duration-300">
-            <div className="text-3xl mb-2">🔄</div>
-            <h4 className="text-lg font-bold text-white mb-1">กรุณาเลี้ยวเครื่องไปทาง {pending_turn_label}</h4>
-            <p className="text-xs text-slate-400 mb-4 font-medium">
-              หันหน้ากล้องให้ขนานกับแนวทางเดินใหม่ตรงๆ แล้วกดยืนยัน
-            </p>
-            <button
-              onClick={handle_confirm_turn_and_resume}
-              className="w-full py-3.5 rounded-2xl bg-purple-600 hover:bg-purple-700 text-white font-bold transition-all text-sm shadow-lg shadow-purple-500/25 active:scale-95"
-            >
-              เริ่มเดินตรงต่อ ➡️
-            </button>
           </div>
         </div>
       )}
