@@ -64,6 +64,7 @@ export default function MapEditorScene({ mode }: { mode: "draw" | "blueprint" })
   const [showSave, setShowSave] = useState(false);
   const [mapName, setMapName] = useState("");
   const [saving, setSaving] = useState(false);
+  const [proximityRadius, setProximityRadius] = useState("1.5");
 
   // Undo history
   const histRef = useRef<{ w: WP[]; e: Ed[] }[]>([]);
@@ -510,7 +511,7 @@ export default function MapEditorScene({ mode }: { mode: "draw" | "blueprint" })
           name: mapName,
           floor: 1,
           initialHeadingDeg: 0,
-          proximityRadiusM: 1.5,
+          proximityRadiusM: parseFloat(proximityRadius) || 1.5,
           waypointsJson: JSON.stringify(wpObj),
           edgesJson: JSON.stringify(edgeArr),
           destinationsJson: JSON.stringify(dests),
@@ -691,7 +692,7 @@ export default function MapEditorScene({ mode }: { mode: "draw" | "blueprint" })
                 <X size={20} />
               </button>
             </div>
-            <div className="mb-6">
+            <div className="mb-4">
               <label className="block text-sm font-semibold text-slate-700 mb-2">ชื่อห้าง / สถานที่</label>
               <input
                 autoFocus
@@ -700,6 +701,19 @@ export default function MapEditorScene({ mode }: { mode: "draw" | "blueprint" })
                 onKeyDown={e => e.key === "Enter" && handleSave()}
                 placeholder="เช่น เซ็นทรัลลาดพร้าว"
                 className="w-full bg-slate-100 border-2 border-transparent rounded-xl px-4 py-3 text-slate-900 focus:outline-none focus:border-purple-500 transition font-medium text-lg"
+              />
+            </div>
+            <div className="mb-6">
+              <label className="block text-sm font-semibold text-slate-700 mb-2">รัศมีการเข้าใกล้จุด (เมตร)</label>
+              <input
+                type="number"
+                step="0.1"
+                min="0.1"
+                value={proximityRadius}
+                onChange={e => setProximityRadius(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && handleSave()}
+                placeholder="เช่น 1.5"
+                className="w-full bg-slate-100 border-2 border-transparent rounded-xl px-4 py-3 text-slate-900 focus:outline-none focus:border-purple-500 transition font-medium text-lg font-mono"
               />
             </div>
             <div className="flex gap-3">
