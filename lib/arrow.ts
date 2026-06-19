@@ -88,6 +88,10 @@ export class NavigationArrow {
     
     this.mesh.position.x += (targetPos.x - this.mesh.position.x) * 0.1;
     this.mesh.position.z += (targetPos.z - this.mesh.position.z) * 0.1;
+    
+    // ponytail: anchor arrow height to camera height to prevent vertical drift
+    const target_y = cameraPosition.y - 1.3;
+    this.baseY = target_y;
   }
   
   update(delta: number) {
@@ -102,8 +106,11 @@ export class NavigationArrow {
     if (this.animationType === 'bounce') {
       this.mesh.position.y = this.baseY + Math.sin(this.time * 4) * 0.05;
     } else if (this.animationType === 'pulse') {
+      this.mesh.position.y = this.baseY;
       const scale = 1 + Math.sin(this.time * 5) * 0.1;
       this.mesh.scale.set(scale, scale, scale);
+    } else {
+      this.mesh.position.y = this.baseY;
     }
   }
 }

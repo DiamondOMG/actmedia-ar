@@ -14,6 +14,11 @@ export const initScenePipelineModule = (storeData: StoreData | null) => {
   let currentWaypointIndex = 0;
   let isArrived = false;
 
+  // ponytail: variables for segment-based drift correction to avoid accumulated SLAM scale errors
+  let last_provider_pos = new THREE.Vector3(0, 0, 0);
+  let prev_waypoint_pos = new THREE.Vector3(0, 0, 0);
+  let is_segment_initialized = false;
+
   const initXrScene = ({ scene, camera, renderer }: any) => {
     renderer.shadowMap.enabled = true;
 
@@ -88,6 +93,7 @@ export const initScenePipelineModule = (storeData: StoreData | null) => {
           currentPath = newPath;
           currentWaypointIndex = 1;
           isArrived = false;
+          is_segment_initialized = false;
         }
       }
 
@@ -95,14 +101,33 @@ export const initScenePipelineModule = (storeData: StoreData | null) => {
         const delta = clock.getDelta();
         const currentTargetId = currentPath[currentWaypointIndex];
         const targetWaypoint = storeData?.waypoints[currentTargetId];
-        const userPos = positionProvider.position;
+        const provider_pos = positionProvider.position;
 
         if (targetWaypoint) {
+          // Initialize segment origin when starting a new leg of navigation
+          if (!is_segment_initialized) {
+            const prev_id = currentPath[currentWaypointIndex - 1];
+            const prev_wp = storeData?.waypoints[prev_id];
+            if (prev_wp) {
+              prev_waypoint_pos.set(prev_wp.x, provider_pos.y, prev_wp.z);
+            } else {
+              prev_waypoint_pos.set(0, provider_pos.y, 0);
+            }
+            last_provider_pos.copy(provider_pos);
+            is_segment_initialized = true;
+          }
+
+          // Calculate delta movement from the last waypoint using calibrated coords
+          const delta_pos = new THREE.Vector3().subVectors(provider_pos, last_provider_pos);
+          
+          // Adjusted position starts from the real waypoint coords + camera delta
+          const adjusted_user_pos = new THREE.Vector3().addVectors(prev_waypoint_pos, delta_pos);
+
           navArrow.updatePosition(camera.position, camera.quaternion);
-          navArrow.setTarget(userPos, targetWaypoint);
+          navArrow.setTarget(adjusted_user_pos, targetWaypoint);
 
           const dist = getDistance(
-            { x: userPos.x, z: userPos.z, label: '' },
+            { x: adjusted_user_pos.x, z: adjusted_user_pos.z, label: '' },
             targetWaypoint
           );
 
@@ -113,11 +138,12 @@ export const initScenePipelineModule = (storeData: StoreData | null) => {
             isArrived
           };
 
-          const proximityRadius = storeData?.proximity_radius_m || 1.5;
+          const proximity_radius = storeData?.proximity_radius_m || 1.5;
 
-          if (dist < proximityRadius) {
+          if (dist < proximity_radius) {
             if (currentWaypointIndex < currentPath.length - 1) {
               currentWaypointIndex++;
+              is_segment_initialized = false; // Trigger re-init for the next segment
             } else {
               isArrived = true;
               if (positionProvider.nav_debug) positionProvider.nav_debug.isArrived = true;
