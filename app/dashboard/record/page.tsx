@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, Footprints, Pencil, FileImage } from "lucide-react";
+import { ArrowLeft, Footprints, Pencil } from "lucide-react";
 
 export default function RecordModePage() {
   return (
@@ -40,21 +40,7 @@ export default function RecordModePage() {
             </div>
             <div>
               <div className="font-semibold text-white">✏️ วาดเส้นทาง (Draw)</div>
-              <div className="text-sm text-slate-400">ลากเส้นบน Canvas สร้างแผนที่บนจอ</div>
-            </div>
-          </Link>
-
-          {/* Blueprint */}
-          <Link
-            href="/dashboard/record/blueprint"
-            className="group flex items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.02] p-6 transition hover:border-cyan-500/40 hover:bg-cyan-500/5"
-          >
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-cyan-500/20 text-cyan-400 transition group-hover:bg-cyan-500/30">
-              <FileImage className="h-6 w-6" />
-            </div>
-            <div>
-              <div className="font-semibold text-white">📄 แปลนอาคาร (Blueprint)</div>
-              <div className="text-sm text-slate-400">อัปโหลด PDF / รูปแปลน แล้วลากเส้นทับ</div>
+              <div className="text-sm text-slate-400">วาดและลากเส้นเพื่อสร้างแผนที่ (อัปโหลดแปลนอาคาร PDF/รูปภาพได้)</div>
             </div>
           </Link>
         </div>

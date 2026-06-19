@@ -12,5 +12,5 @@ const MapEditorScene = dynamic(() => import("@/components/MapEditorScene"), {
 });
 
 export default function DrawPage() {
-  return <MapEditorScene mode="draw" />;
+  return <MapEditorScene />;
 }

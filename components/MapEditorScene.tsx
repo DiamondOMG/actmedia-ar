@@ -8,13 +8,20 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Pencil, Hand, Undo2, Trash2,
-  Upload, Check, X, ZoomIn, ZoomOut,
+  Upload, Check, X, ZoomIn, ZoomOut, MapPin, DraftingCompass
 } from "lucide-react";
 
 /* ─── Types ──────────────────────────────────────────── */
-interface WP { id: string; px: number; py: number; label: string }
+interface WP {
+  id: string;
+  px: number;
+  py: number;
+  label: string;
+  type: "turn" | "destination" | "qr_checkpoint";
+  headingDeg?: number;
+}
 interface Ed { from: string; to: string; meters?: number }
-type Tool = "draw" | "pan";
+type Tool = "pan" | "waypoint" | "edge" | "angle";
 
 /* ─── Constants ──────────────────────────────────────── */
 const WP_R = 14;       // waypoint hit radius (screen px)
@@ -31,8 +38,26 @@ function ptSegDist(px: number, py: number, ax: number, ay: number, bx: number, b
   return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
 }
 
+function findSharedWP(e1: Ed, e2: Ed): string | null {
+  if (e1.from === e2.from || e1.from === e2.to) return e1.from;
+  if (e1.to === e2.from || e1.to === e2.to) return e1.to;
+  return null;
+}
+
+function calcAngleDeg(e1: Ed, e2: Ed, sharedId: string, wps: WP[]): number {
+  const s = wps.find(w => w.id === sharedId)!;
+  const f1 = wps.find(w => w.id === (e1.from === sharedId ? e1.to : e1.from))!;
+  const f2 = wps.find(w => w.id === (e2.from === sharedId ? e2.to : e2.from))!;
+  const v1x = f1.px - s.px, v1y = f1.py - s.py;
+  const v2x = f2.px - s.px, v2y = f2.py - s.py;
+  const dot = v1x * v2x + v1y * v2y;
+  const cross = v1x * v2y - v1y * v2x;
+  let deg = Math.atan2(Math.abs(cross), dot) * 180 / Math.PI;
+  return deg;
+}
+
 /* ─── Component ──────────────────────────────────────── */
-export default function MapEditorScene({ mode }: { mode: "draw" | "blueprint" }) {
+export default function MapEditorScene() {
   const router = useRouter();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -43,9 +68,21 @@ export default function MapEditorScene({ mode }: { mode: "draw" | "blueprint" })
   const nextIdRef = useRef(1);
 
   // Interaction
-  const [tool, setTool] = useState<Tool>("draw");
+  const [tool, setTool] = useState<Tool>("waypoint");
   const [edgeFrom, setEdgeFrom] = useState<string | null>(null);
   const [selEdge, setSelEdge] = useState<number | null>(null);
+
+  // Ruler/Angle state
+  const [rulerEdges, setRulerEdges] = useState<number[]>([]);
+  const [showAngle, setShowAngle] = useState(false);
+  const [angleVal, setAngleVal] = useState("");
+
+  // Waypoint Editor Modal state
+  const [showWpModal, setShowWpModal] = useState(false);
+  const [selWpId, setSelWpId] = useState<string | null>(null);
+  const [wpLabel, setWpLabel] = useState("");
+  const [wpType, setWpType] = useState<"turn" | "destination" | "qr_checkpoint">("turn");
+  const [wpHeading, setWpHeading] = useState("0");
 
   // Scale calibration
   const [ppm, setPpm] = useState<number | null>(null); // pixels-per-meter
@@ -70,7 +107,7 @@ export default function MapEditorScene({ mode }: { mode: "draw" | "blueprint" })
   const histRef = useRef<{ w: WP[]; e: Ed[] }[]>([]);
 
   // Mouse position for edge preview
-  const mouseRef = useRef<{ x: number; y: number } | null>(null);
+  const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
   const [tick, setTick] = useState(0);
 
   // Pan drag tracking
@@ -160,13 +197,27 @@ export default function MapEditorScene({ mode }: { mode: "draw" | "blueprint" })
       if (!a || !b) return;
 
       const sel = i === selEdge;
+      const rulerSel = rulerEdges.includes(i);
+      const isSelected = sel || rulerSel;
       const cal = e.meters != null;
+
+      // Glow for selected edges
+      if (isSelected) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(a.px, a.py);
+        ctx.lineTo(b.px, b.py);
+        ctx.strokeStyle = rulerSel ? "rgba(245,158,11,0.4)" : "rgba(168,85,247,0.4)";
+        ctx.lineWidth = 14 / cam.z;
+        ctx.stroke();
+        ctx.restore();
+      }
 
       ctx.beginPath();
       ctx.moveTo(a.px, a.py);
       ctx.lineTo(b.px, b.py);
-      ctx.strokeStyle = sel ? "#f59e0b" : cal ? "#22c55e" : "#8b5cf6";
-      ctx.lineWidth = (sel ? 4 : 2.5) / cam.z;
+      ctx.strokeStyle = isSelected ? (rulerSel ? "#f59e0b" : "#a855f7") : cal ? "#22c55e" : "#64748b";
+      ctx.lineWidth = (isSelected ? 4 : 2.5) / cam.z;
       ctx.stroke();
 
       // Distance label
@@ -184,32 +235,89 @@ export default function MapEditorScene({ mode }: { mode: "draw" | "blueprint" })
       }
     });
 
-    // Edge preview (dashed line following mouse)
-    if (edgeFrom && mouseRef.current) {
-      const a = wps.find(w => w.id === edgeFrom);
-      if (a) {
-        ctx.beginPath();
-        ctx.moveTo(a.px, a.py);
-        ctx.lineTo(mouseRef.current.x, mouseRef.current.y);
-        ctx.strokeStyle = "rgba(168,85,247,0.5)";
-        ctx.lineWidth = 2 / cam.z;
-        ctx.setLineDash([6 / cam.z, 4 / cam.z]);
-        ctx.stroke();
-        ctx.setLineDash([]);
+    // Angle arc between two selected adjacent edges for angle adjustment
+    if (rulerEdges.length === 2) {
+      const e1 = eds[rulerEdges[0]], e2 = eds[rulerEdges[1]];
+      if (e1 && e2) {
+        const sharedId = findSharedWP(e1, e2);
+        if (sharedId) {
+          const s = wps.find(w => w.id === sharedId)!;
+          const f1 = wps.find(w => w.id === (e1.from === sharedId ? e1.to : e1.from))!;
+          const f2 = wps.find(w => w.id === (e2.from === sharedId ? e2.to : e2.from))!;
+          const a1 = Math.atan2(f1.py - s.py, f1.px - s.px);
+          const a2 = Math.atan2(f2.py - s.py, f2.px - s.px);
+          const arcR = 30 / cam.z;
+          ctx.beginPath();
+          ctx.arc(s.px, s.py, arcR, Math.min(a1, a2), Math.max(a1, a2));
+          ctx.strokeStyle = "#f59e0b";
+          ctx.lineWidth = 2 / cam.z;
+          ctx.stroke();
+          
+          // Angle label
+          const midA = (a1 + a2) / 2;
+          const labelR = arcR + 14 / cam.z;
+          const deg = calcAngleDeg(e1, e2, sharedId, wps);
+          const fs = Math.max(10, 12 / cam.z);
+          ctx.font = `bold ${fs}px sans-serif`;
+          ctx.fillStyle = "#fbbf24";
+          ctx.textAlign = "center";
+          ctx.fillText(`${deg.toFixed(1)}°`, s.px + labelR * Math.cos(midA), s.py + labelR * Math.sin(midA));
+        }
       }
     }
 
-    // Waypoints
+    // Edge preview (dashed line following mouse in edge tool)
+    if (tool === "edge" && edgeFrom && mousePos) {
+      const a = wps.find(w => w.id === edgeFrom);
+      const hoverWp = hitWP(mousePos.x, mousePos.y);
+      if (a) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(a.px, a.py);
+        const targetX = hoverWp ? hoverWp.px : mousePos.x;
+        const targetY = hoverWp ? hoverWp.py : mousePos.y;
+        ctx.lineTo(targetX, targetY);
+        ctx.strokeStyle = "rgba(168, 85, 247, 0.5)";
+        ctx.lineWidth = 2.5 / cam.z;
+        ctx.setLineDash([6 / cam.z, 4 / cam.z]);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    // Waypoint preview in waypoint tool (green if hovering on edge, purple if on empty space)
+    if (tool === "waypoint" && mousePos) {
+      const hoverWp = hitWP(mousePos.x, mousePos.y);
+      const hoverEd = hitEdge(mousePos.x, mousePos.y);
+      const r = WP_R / cam.z;
+
+      if (!hoverWp) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(mousePos.x, mousePos.y, r, 0, Math.PI * 2);
+        ctx.fillStyle = hoverEd !== null ? "rgba(34, 197, 94, 0.4)" : "rgba(168, 85, 247, 0.4)";
+        ctx.fill();
+        ctx.strokeStyle = hoverEd !== null ? "rgba(34, 197, 94, 0.6)" : "rgba(255, 255, 255, 0.4)";
+        ctx.lineWidth = 2 / cam.z;
+        ctx.setLineDash([4 / cam.z, 2 / cam.z]);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    // Waypoints rendering
     wps.forEach((wp, i) => {
       const r = WP_R / cam.z;
       const first = i === 0;
+      const isQr = wp.type === "qr_checkpoint";
+      const isDest = wp.type === "destination";
 
       ctx.beginPath();
       ctx.arc(wp.px, wp.py, r, 0, Math.PI * 2);
-      ctx.fillStyle = first ? "#3b82f6" : "#a855f7";
+      ctx.fillStyle = first ? "#3b82f6" : isQr ? "#f59e0b" : isDest ? "#ec4899" : "#8b5cf6";
       ctx.fill();
-      ctx.strokeStyle = "#fff";
-      ctx.lineWidth = 2 / cam.z;
+      ctx.strokeStyle = isQr ? "#fbbf24" : "#fff";
+      ctx.lineWidth = (isQr ? 3 : 2) / cam.z;
       ctx.stroke();
 
       // ID label
@@ -219,15 +327,22 @@ export default function MapEditorScene({ mode }: { mode: "draw" | "blueprint" })
       ctx.textAlign = "center";
       ctx.fillText(wp.id, wp.px, wp.py - r - 4 / cam.z);
 
-      if (first) {
-        ctx.fillStyle = "#93c5fd";
-        ctx.fillText("START", wp.px, wp.py + r + fs + 2 / cam.z);
+      let subLabel = "";
+      if (first) subLabel = "START";
+      else if (isQr) subLabel = `QR (${wp.headingDeg || 0}°)`;
+      else if (isDest) subLabel = wp.label;
+
+      if (subLabel) {
+        const subFs = Math.max(8, 10 / cam.z);
+        ctx.font = `bold ${subFs}px sans-serif`;
+        ctx.fillStyle = first ? "#93c5fd" : isQr ? "#fbbf24" : "#fbcfe8";
+        ctx.fillText(subLabel, wp.px, wp.py + r + subFs + 2 / cam.z);
       }
     });
 
     ctx.restore();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wps, eds, cam, bg, selEdge, edgeFrom, ppm, tick]);
+  }, [wps, eds, cam, bg, selEdge, edgeFrom, ppm, tick, rulerEdges, tool, mousePos]);
 
   /* ─── Init camera center ───────────────────────────── */
   useEffect(() => {
@@ -256,20 +371,30 @@ export default function MapEditorScene({ mode }: { mode: "draw" | "blueprint" })
           setWps(snap.w);
           setEds(snap.e);
           setEdgeFrom(null);
+          setRulerEdges([]);
           nextIdRef.current = snap.w.length > 0
             ? Math.max(...snap.w.map(w => parseInt(w.id.slice(1)))) + 1
             : 1;
         }
       }
-      if (e.key === "Escape") { setEdgeFrom(null); setSelEdge(null); }
-      if ((e.key === "Delete" || e.key === "Backspace") && selEdge !== null) {
-        setEds(prev => prev.filter((_, i) => i !== selEdge));
-        setSelEdge(null);
+      if (e.key === "Escape") { setEdgeFrom(null); setSelEdge(null); setRulerEdges([]); }
+      if (e.key === "Delete" || e.key === "Backspace") {
+        if (selEdge !== null) {
+          pushHist();
+          setEds(prev => prev.filter((_, i) => i !== selEdge));
+          setSelEdge(null);
+        } else if (selWpId !== null) {
+          pushHist();
+          setWps(prev => prev.filter(w => w.id !== selWpId));
+          setEds(prev => prev.filter(x => x.from !== selWpId && x.to !== selWpId));
+          if (edgeFrom === selWpId) setEdgeFrom(null);
+          setSelWpId(null);
+        }
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selEdge]);
+  }, [selEdge, selWpId, edgeFrom]);
 
   /* ─── Zoom (native wheel, passive: false) ──────────── */
   useEffect(() => {
@@ -305,46 +430,121 @@ export default function MapEditorScene({ mode }: { mode: "draw" | "blueprint" })
     canvasRef.current?.setPointerCapture(e.pointerId);
     const w = getWorld(e);
 
-    // Pan mode: always pan
+    // Pan mode
     if (tool === "pan") {
       panRef.current = { active: true, sx: e.clientX, sy: e.clientY, cx: cam.x, cy: cam.y, moved: false };
       return;
     }
 
-    // Draw mode: check what's under cursor
-    const wp = hitWP(w.x, w.y);
-    if (wp) {
-      if (edgeFrom) {
-        // Complete edge (or cancel if same WP / duplicate)
-        if (edgeFrom !== wp.id && !eds.some(x => (x.from === edgeFrom && x.to === wp.id) || (x.from === wp.id && x.to === edgeFrom))) {
-          pushHist();
-          setEds(prev => [...prev, { from: edgeFrom!, to: wp.id }]);
-        }
-        setEdgeFrom(null);
-      } else {
-        setEdgeFrom(wp.id);
+    // Waypoint tool: create, insert (split edge), or edit waypoint details
+    if (tool === "waypoint") {
+      const wp = hitWP(w.x, w.y);
+      if (wp) {
+        setSelWpId(wp.id);
+        setWpLabel(wp.label);
+        setWpType(wp.type || "turn");
+        setWpHeading(wp.headingDeg?.toString() || "0");
+        setShowWpModal(true);
+        return;
       }
-      setSelEdge(null);
+
+      // Check if clicking on an edge to insert/split edge
+      const ei = hitEdge(w.x, w.y);
+      if (ei !== null) {
+        pushHist();
+        const edgeToSplit = eds[ei];
+        const newId = `W${nextIdRef.current}`;
+        nextIdRef.current++;
+
+        const newWp: WP = {
+          id: newId,
+          px: w.x,
+          py: w.y,
+          label: `จุดที่ ${parseInt(newId.slice(1))}`,
+          type: "turn"
+        };
+
+        setWps(prev => [...prev, newWp]);
+        setEds(prev => {
+          const nextEds = prev.filter((_, idx) => idx !== ei);
+          return [
+            ...nextEds,
+            { from: edgeToSplit.from, to: newId, meters: edgeToSplit.meters ? edgeToSplit.meters / 2 : undefined },
+            { from: newId, to: edgeToSplit.to, meters: edgeToSplit.meters ? edgeToSplit.meters / 2 : undefined }
+          ];
+        });
+        return;
+      }
+
+      // Empty space -> drag check (will place WP in up if not dragged)
+      panRef.current = { active: true, sx: e.clientX, sy: e.clientY, cx: cam.x, cy: cam.y, moved: false };
       return;
     }
 
-    const ei = hitEdge(w.x, w.y);
-    if (ei !== null) {
-      setSelEdge(ei);
-      setEdgeFrom(null);
-      setDistVal(eds[ei].meters?.toString() || "");
-      setShowDist(true);
+    // Edge tool: connect nodes or calibrate edge distance
+    if (tool === "edge") {
+      const wp = hitWP(w.x, w.y);
+      if (wp) {
+        if (edgeFrom) {
+          // Connect points
+          if (edgeFrom !== wp.id && !eds.some(x => (x.from === edgeFrom && x.to === wp.id) || (x.from === wp.id && x.to === edgeFrom))) {
+            pushHist();
+            setEds(prev => [...prev, { from: edgeFrom!, to: wp.id }]);
+          }
+          setEdgeFrom(null);
+        } else {
+          setEdgeFrom(wp.id);
+        }
+        setSelEdge(null);
+        return;
+      }
+
+      const ei = hitEdge(w.x, w.y);
+      if (ei !== null) {
+        setSelEdge(ei);
+        setEdgeFrom(null);
+        setDistVal(eds[ei].meters?.toString() || "");
+        setShowDist(true);
+        return;
+      }
+
+      // Empty space -> allow panning
+      panRef.current = { active: true, sx: e.clientX, sy: e.clientY, cx: cam.x, cy: cam.y, moved: false };
       return;
     }
 
-    // Empty space → start pan tracking (will decide click vs drag in up)
-    panRef.current = { active: true, sx: e.clientX, sy: e.clientY, cx: cam.x, cy: cam.y, moved: false };
+    // Angle tool: select 2 adjacent edges to adjust angle
+    if (tool === "angle") {
+      const ei = hitEdge(w.x, w.y);
+      if (ei !== null) {
+        if (rulerEdges.length === 0) {
+          setRulerEdges([ei]);
+        } else if (rulerEdges.length === 1 && ei !== rulerEdges[0]) {
+          const shared = findSharedWP(eds[rulerEdges[0]], eds[ei]);
+          if (shared) {
+            setRulerEdges([rulerEdges[0], ei]);
+            setAngleVal(calcAngleDeg(eds[rulerEdges[0]], eds[ei], shared, wps).toFixed(1));
+            setShowAngle(true);
+          } else {
+            // Not adjacent -> reset to this edge
+            setRulerEdges([ei]);
+          }
+        } else {
+          // Clicked same edge -> reset
+          setRulerEdges([]);
+        }
+      } else {
+        setRulerEdges([]);
+        panRef.current = { active: true, sx: e.clientX, sy: e.clientY, cx: cam.x, cy: cam.y, moved: false };
+      }
+      return;
+    }
   };
 
   /* ─── Pointer move ─────────────────────────────────── */
   const handleMove = (e: React.PointerEvent) => {
     const w = getWorld(e);
-    mouseRef.current = w;
+    setMousePos(w);
 
     if (panRef.current.active) {
       const dx = e.clientX - panRef.current.sx;
@@ -359,8 +559,6 @@ export default function MapEditorScene({ mode }: { mode: "draw" | "blueprint" })
       }
       return;
     }
-
-    if (edgeFrom) setTick(t => t + 1); // re-render preview line
   };
 
   /* ─── Pointer up ───────────────────────────────────── */
@@ -371,24 +569,18 @@ export default function MapEditorScene({ mode }: { mode: "draw" | "blueprint" })
       const wasDrag = panRef.current.moved;
       panRef.current = { active: false, sx: 0, sy: 0, cx: 0, cy: 0, moved: false };
 
-      if (!wasDrag && tool === "draw") {
+      if (!wasDrag && tool === "waypoint") {
         const w = getWorld(e);
-
-        if (edgeFrom) {
-          // Place new WP + auto-connect + continue chain
-          const id = `W${nextIdRef.current}`;
-          nextIdRef.current++;
-          pushHist();
-          setWps(prev => [...prev, { id, px: w.x, py: w.y, label: `จุดที่ ${parseInt(id.slice(1))}` }]);
-          setEds(prev => [...prev, { from: edgeFrom!, to: id }]);
-          setEdgeFrom(id); // continue chain
-        } else {
-          // Place standalone WP
-          const id = `W${nextIdRef.current}`;
-          nextIdRef.current++;
-          pushHist();
-          setWps(prev => [...prev, { id, px: w.x, py: w.y, label: `จุดที่ ${parseInt(id.slice(1))}` }]);
-        }
+        const id = `W${nextIdRef.current}`;
+        nextIdRef.current++;
+        pushHist();
+        setWps(prev => [...prev, {
+          id,
+          px: w.x,
+          py: w.y,
+          label: `จุดที่ ${parseInt(id.slice(1))}`,
+          type: "turn"
+        }]);
         setSelEdge(null);
       }
     }
@@ -476,29 +668,45 @@ export default function MapEditorScene({ mode }: { mode: "draw" | "blueprint" })
         x: Number(((wp.px - w1.px) / ppm!).toFixed(3)),
         z: Number(((wp.py - w1.py) / ppm!).toFixed(3)),
         label: wp.label,
-        type: "turn",
+        type: wp.type || "turn",
+        ...(wp.type === "qr_checkpoint" ? { headingDeg: wp.headingDeg || 0 } : {})
       };
     });
 
     const edgeArr = eds.map(e => [e.from, e.to]);
 
-    // Auto-gen demo destinations (same logic as ARRecordScene)
-    const demo = [
-      { icon: "🏪", name: "ร้านค้า (Demo)", desc: "จุดแวะพัก" },
-      { icon: "☕", name: "ร้านกาแฟ (Demo)", desc: "เครื่องดื่ม" },
-      { icon: "👕", name: "ร้านเสื้อผ้า (Demo)", desc: "แฟชั่น" },
-      { icon: "🚻", name: "ห้องน้ำ (Demo)", desc: "สิ่งอำนวยความสะดวก" },
-      { icon: "🏁", name: "จุดหมาย (Demo)", desc: "ปลายทาง" },
-    ];
-    const avail = Object.keys(wpObj).slice(1);
+    // Gather custom destinations first
     const dests: any[] = [];
-    const n = Math.min(5, avail.length);
-    for (let i = 0; i < n; i++) {
-      const idx = Math.floor((i / Math.max(1, n - 1)) * (avail.length - 1));
-      const wid = avail[idx];
-      if (!dests.some(d => d.waypoint === wid)) {
-        dests.push({ id: `dest_${wid}`, name: demo[i].name, waypoint: wid, icon: demo[i].icon, description: demo[i].desc });
-        wpObj[wid].type = "destination";
+    wps.forEach(wp => {
+      if (wp.type === "destination") {
+        dests.push({
+          id: `dest_${wp.id}`,
+          name: wp.label,
+          waypoint: wp.id,
+          icon: "🏪",
+          description: "ร้านค้า/ปลายทาง",
+        });
+      }
+    });
+
+    // Fallback to auto-gen demo destinations if none defined
+    if (dests.length === 0) {
+      const demo = [
+        { icon: "🏪", name: "ร้านค้า (Demo)", desc: "จุดแวะพัก" },
+        { icon: "☕", name: "ร้านกาแฟ (Demo)", desc: "เครื่องดื่ม" },
+        { icon: "👕", name: "ร้านเสื้อผ้า (Demo)", desc: "แฟชั่น" },
+        { icon: "🚻", name: "ห้องน้ำ (Demo)", desc: "สิ่งอำนวยความสะดวก" },
+        { icon: "🏁", name: "จุดหมาย (Demo)", desc: "ปลายทาง" },
+      ];
+      const avail = Object.keys(wpObj).slice(1);
+      const n = Math.min(5, avail.length);
+      for (let i = 0; i < n; i++) {
+        const idx = Math.floor((i / Math.max(1, n - 1)) * (avail.length - 1));
+        const wid = avail[idx];
+        if (!dests.some(d => d.waypoint === wid)) {
+          dests.push({ id: `dest_${wid}`, name: demo[i].name, waypoint: wid, icon: demo[i].icon, description: demo[i].desc });
+          wpObj[wid].type = "destination";
+        }
       }
     }
 
@@ -515,7 +723,7 @@ export default function MapEditorScene({ mode }: { mode: "draw" | "blueprint" })
           waypointsJson: JSON.stringify(wpObj),
           edgesJson: JSON.stringify(edgeArr),
           destinationsJson: JSON.stringify(dests),
-          comment: `สร้างจากโหมด ${mode === "blueprint" ? "Blueprint" : "Draw"}`,
+          comment: "สร้างจากโหมดวาด Canvas",
         }),
       });
       if (!res.ok) throw new Error();
@@ -524,6 +732,42 @@ export default function MapEditorScene({ mode }: { mode: "draw" | "blueprint" })
       alert("เซฟล้มเหลว กรุณาลองใหม่");
       setSaving(false);
     }
+  };
+
+  /* ─── Angle submit handler ─────────────────────────── */
+  const handleAngleSubmit = () => {
+    const targetDeg = parseFloat(angleVal);
+    if (isNaN(targetDeg) || targetDeg <= 0 || targetDeg >= 360) return;
+    if (rulerEdges.length !== 2) return;
+
+    const e1 = eds[rulerEdges[0]], e2 = eds[rulerEdges[1]];
+    const sharedId = findSharedWP(e1, e2);
+    if (!sharedId) return;
+
+    const s = wps.find(w => w.id === sharedId)!;
+    const f1Id = e1.from === sharedId ? e1.to : e1.from;
+    const f2Id = e2.from === sharedId ? e2.to : e2.from;
+    const f1 = wps.find(w => w.id === f1Id)!;
+    const f2 = wps.find(w => w.id === f2Id)!;
+
+    const v1x = f1.px - s.px, v1y = f1.py - s.py;
+    const v2x = f2.px - s.px, v2y = f2.py - s.py;
+    const cross = v1x * v2y - v1y * v2x;
+    const sign = cross >= 0 ? 1 : -1; // preserve CW/CCW side
+
+    const refAngle = Math.atan2(v1y, v1x);
+    const dist2 = Math.hypot(v2x, v2y);
+    const targetRad = targetDeg * Math.PI / 180;
+    const newAngle = refAngle + sign * targetRad;
+
+    pushHist();
+    setWps(prev => prev.map(w =>
+      w.id === f2Id
+        ? { ...w, px: s.px + dist2 * Math.cos(newAngle), py: s.py + dist2 * Math.sin(newAngle) }
+        : w
+    ));
+    setShowAngle(false);
+    setRulerEdges([]);
   };
 
   /* ─── Undo handler (for toolbar button) ────────────── */
@@ -552,16 +796,14 @@ export default function MapEditorScene({ mode }: { mode: "draw" | "blueprint" })
         </button>
 
         <span className="font-bold text-sm">
-          {mode === "blueprint" ? "📄 Blueprint" : "✏️ วาดเส้นทาง"}
+          ✏️ วาดเส้นทาง
         </span>
 
         <div className="flex items-center gap-2">
-          {mode === "blueprint" && (
-            <label className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 rounded-lg text-xs font-semibold cursor-pointer transition">
-              <Upload size={14} /> อัปโหลด
-              <input type="file" accept=".pdf,image/*" className="hidden" onChange={handleUpload} />
-            </label>
-          )}
+          <label className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 rounded-lg text-xs font-semibold cursor-pointer transition">
+            <Upload size={14} /> อัปโหลดแปลน
+            <input type="file" accept=".pdf,image/*" className="hidden" onChange={handleUpload} />
+          </label>
           <button
             onClick={() => {
               if (canSave) setShowSave(true);
@@ -580,8 +822,10 @@ export default function MapEditorScene({ mode }: { mode: "draw" | "blueprint" })
       <div className="flex-1 flex overflow-hidden">
         {/* ── Toolbar ───────────────────────────────── */}
         <div className="w-12 shrink-0 flex flex-col items-center py-3 gap-1.5 border-r border-white/10 bg-slate-900/50">
-          <ToolBtn icon={<Pencil size={18} />} active={tool === "draw"} onClick={() => setTool("draw")} title="วาด" />
-          <ToolBtn icon={<Hand size={18} />} active={tool === "pan"} onClick={() => { setTool("pan"); setEdgeFrom(null); }} title="เลื่อน" />
+          <ToolBtn icon={<Hand size={18} />} active={tool === "pan"} onClick={() => { setTool("pan"); setEdgeFrom(null); setRulerEdges([]); }} title="เลื่อนบอร์ด (Pan)" />
+          <ToolBtn icon={<MapPin size={18} />} active={tool === "waypoint"} onClick={() => { setTool("waypoint"); setEdgeFrom(null); setRulerEdges([]); }} title="ปักจุด / ตั้งค่าจุด (Waypoint)" />
+          <ToolBtn icon={<Pencil size={18} />} active={tool === "edge"} onClick={() => { setTool("edge"); setRulerEdges([]); }} title="เชื่อมเส้น / ใส่ระยะ (Edge)" />
+          <ToolBtn icon={<DraftingCompass size={18} />} active={tool === "angle"} onClick={() => { setTool("angle"); setEdgeFrom(null); setRulerEdges([]); }} title="จัดระเบียบมุม (Angle)" />
 
           <div className="flex-1" />
 
@@ -613,6 +857,7 @@ export default function MapEditorScene({ mode }: { mode: "draw" | "blueprint" })
             onPointerDown={handleDown}
             onPointerMove={handleMove}
             onPointerUp={handleUp}
+            onPointerLeave={() => setMousePos(null)}
           />
 
           {/* Empty state hint */}
@@ -620,9 +865,9 @@ export default function MapEditorScene({ mode }: { mode: "draw" | "blueprint" })
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="text-center text-slate-500">
                 <p className="text-lg font-semibold mb-1">
-                  {mode === "blueprint" ? "อัปโหลดแปลนก่อน แล้วคลิกวาง Waypoint" : "คลิกเพื่อวาง Waypoint แรก"}
+                  คลิกเพื่อวาง Waypoint แรก หรือกดอัปโหลดแปลนด้านบน
                 </p>
-                <p className="text-sm">จุดแรก = จุดเริ่มต้น AR (START)</p>
+                <p className="text-sm">จุดแรกที่วาง = จุดเริ่มต้น AR (START)</p>
               </div>
             </div>
           )}
@@ -722,6 +967,115 @@ export default function MapEditorScene({ mode }: { mode: "draw" | "blueprint" })
               </button>
               <button onClick={handleSave} disabled={saving} className="flex-1 py-3.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold transition disabled:opacity-50">
                 {saving ? "รอสักครู่..." : "OK"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Waypoint Editor Modal ────────────────────── */}
+      {showWpModal && selWpId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-6">
+          <div className="bg-slate-800 rounded-2xl w-full max-w-xs p-5 shadow-2xl border border-white/10">
+            <h3 className="text-lg font-bold mb-4 text-white font-sans">📍 ตั้งค่าจุด {selWpId}</h3>
+            
+            <div className="mb-3">
+              <label className="block text-xs text-slate-400 mb-1 font-sans">ประเภทจุด</label>
+              <select
+                value={wpType}
+                onChange={e => {
+                  const val = e.target.value as any;
+                  setWpType(val);
+                  if (val === "qr_checkpoint" && wpHeading === "0") setWpHeading("0");
+                }}
+                className="w-full bg-slate-700 text-white rounded-xl px-3 py-2 text-sm outline-none border border-slate-600 focus:border-purple-500 font-sans"
+              >
+                <option value="turn">จุดเลี้ยวทั่วไป (Turn)</option>
+                <option value="destination">ร้านค้า / ปลายทาง (Destination)</option>
+                <option value="qr_checkpoint">จุดสแกน QR (QR Checkpoint)</option>
+              </select>
+            </div>
+
+            <div className="mb-3">
+              <label className="block text-xs text-slate-400 mb-1 font-sans">ชื่อเรียก / ป้ายชื่อ (Label)</label>
+              <input
+                type="text"
+                value={wpLabel}
+                onChange={e => setWpLabel(e.target.value)}
+                placeholder="เช่น Starbucks"
+                className="w-full bg-slate-700 text-white rounded-xl px-3 py-2 text-sm outline-none border border-slate-600 focus:border-purple-500 font-medium font-sans"
+              />
+            </div>
+
+            {wpType === "qr_checkpoint" && (
+              <div className="mb-4">
+                <label className="block text-xs text-slate-400 mb-1 font-sans">ทิศทางเริ่มต้นของป้าย (องศา 0-360)</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="360"
+                  value={wpHeading}
+                  onChange={e => setWpHeading(e.target.value)}
+                  placeholder="เช่น 90"
+                  className="w-full bg-slate-700 text-white rounded-xl px-3 py-2 text-sm outline-none border border-slate-600 focus:border-purple-500 font-mono"
+                />
+              </div>
+            )}
+
+            <div className="flex gap-3 mt-4">
+              <button onClick={() => setShowWpModal(false)} className="flex-1 py-2.5 bg-slate-700 hover:bg-slate-600 rounded-xl text-sm font-bold transition font-sans">
+                ยกเลิก
+              </button>
+              <button
+                onClick={() => {
+                  pushHist();
+                  setWps(prev => prev.map(w =>
+                    w.id === selWpId
+                      ? {
+                          ...w,
+                          label: wpLabel.trim() || `จุดที่ ${parseInt(w.id.slice(1))}`,
+                          type: wpType,
+                          headingDeg: wpType === "qr_checkpoint" ? (parseFloat(wpHeading) || 0) : undefined
+                        }
+                      : w
+                  ));
+                  setShowWpModal(false);
+                }}
+                className="flex-1 py-2.5 bg-purple-600 hover:bg-purple-500 rounded-xl text-sm font-bold transition font-sans"
+              >
+                บันทึก
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Angle Modal ──────────────────────────────── */}
+      {showAngle && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-6">
+          <div className="bg-slate-800 rounded-2xl w-full max-w-xs p-5 shadow-2xl border border-white/10">
+            <h3 className="text-lg font-bold mb-4 font-sans">📐 ปรับมุมระหว่างเส้น (องศา)</h3>
+            <input
+              autoFocus
+              type="number"
+              step="0.1"
+              min="0.1"
+              max="359.9"
+              value={angleVal}
+              onChange={e => setAngleVal(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && handleAngleSubmit()}
+              placeholder="เช่น 90"
+              className="w-full bg-slate-700 border-2 border-transparent focus:border-amber-500 rounded-xl px-4 py-3 text-white text-lg font-mono outline-none transition mb-3"
+            />
+            <p className="text-xs text-slate-400 mb-4 font-sans">
+              ระบบจะหมุนปลายเส้นที่ 2 ให้ได้มุมตามที่กำหนด
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => { setShowAngle(false); setRulerEdges([]); }} className="flex-1 py-2.5 bg-slate-700 hover:bg-slate-600 rounded-xl font-bold transition font-sans">
+                ยกเลิก
+              </button>
+              <button onClick={handleAngleSubmit} className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-900 rounded-xl font-bold transition font-sans">
+                ปรับมุม
               </button>
             </div>
           </div>
