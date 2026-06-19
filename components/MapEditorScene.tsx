@@ -566,11 +566,10 @@ export default function MapEditorScene({ mode }: { mode: "draw" | "blueprint" })
               if (canSave) setShowSave(true);
               else alert("ต้องมี ≥ 2 จุด + ≥ 1 เส้น + ใส่ระยะอย่างน้อย 1 เส้น");
             }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-              canSave
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${canSave
                 ? "bg-purple-600 hover:bg-purple-500 text-white"
                 : "bg-slate-800 text-slate-500 cursor-not-allowed"
-            }`}
+              }`}
           >
             <Check size={14} /> บันทึก
           </button>
@@ -730,13 +729,12 @@ function ToolBtn({ icon, active, onClick, title, danger }: {
     <button
       onClick={onClick}
       title={title}
-      className={`p-2 rounded-lg transition ${
-        active
+      className={`p-2 rounded-lg transition ${active
           ? "bg-purple-600 text-white"
           : danger
             ? "text-slate-400 hover:text-red-400 hover:bg-red-500/10"
             : "text-slate-400 hover:text-white hover:bg-white/10"
-      }`}
+        }`}
     >
       {icon}
     </button>
