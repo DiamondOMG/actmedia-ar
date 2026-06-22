@@ -57,7 +57,7 @@ function calcAngleDeg(e1: Ed, e2: Ed, sharedId: string, wps: WP[]): number {
 }
 
 /* ─── Component ──────────────────────────────────────── */
-export default function MapEditorScene() {
+export default function MapEditorScene({ mode }: { mode?: string } = {}) {
   const router = useRouter();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
