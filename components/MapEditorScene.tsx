@@ -5,7 +5,7 @@
 //           upgrade path: add pointer event multi-touch handling
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft, Pencil, Hand, Undo2, Trash2,
   Upload, Check, X, ZoomIn, ZoomOut, MapPin, DraftingCompass
@@ -59,6 +59,8 @@ function calcAngleDeg(e1: Ed, e2: Ed, sharedId: string, wps: WP[]): number {
 /* ─── Component ──────────────────────────────────────── */
 export default function MapEditorScene({ mode }: { mode?: string } = {}) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const storeId = searchParams?.get("store");
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -419,6 +421,79 @@ export default function MapEditorScene({ mode }: { mode?: string } = {}) {
     ro.observe(wrap);
     return () => ro.disconnect();
   }, []);
+
+  /* ─── Load map for editing ─────────────────────────── */
+  useEffect(() => {
+    if (!storeId) return;
+
+    const loadStore = async () => {
+      try {
+        const res = await fetch(`/api/stores/${storeId}`);
+        if (!res.ok) throw new Error("Failed to load map");
+        const data = await res.json();
+
+        const scale = 30;
+        const loadedWps: WP[] = [];
+        for (const id in data.waypoints) {
+          const rawWp = data.waypoints[id];
+          loadedWps.push({
+            id,
+            px: rawWp.x * scale,
+            py: rawWp.z * scale,
+            label: rawWp.label,
+            type: rawWp.type,
+            headingDeg: rawWp.headingDeg,
+          });
+        }
+
+        const loadedEds: Ed[] = data.edges.map((e: [string, string]) => {
+          const wpFrom = data.waypoints[e[0]];
+          const wpTo = data.waypoints[e[1]];
+          let mVal: number | undefined = undefined;
+          if (wpFrom && wpTo) {
+            mVal = Number(Math.hypot(wpTo.x - wpFrom.x, wpTo.z - wpFrom.z).toFixed(1));
+          }
+          return { from: e[0], to: e[1], meters: mVal };
+        });
+
+        setWps(loadedWps);
+        setEds(loadedEds);
+        setPpm(scale);
+        setMapName(data.store_name || "");
+        setProximityRadius((data.proximity_radius_m || 1.5).toString());
+
+        const wpIds = Object.keys(data.waypoints)
+          .map(id => parseInt(id.slice(1)))
+          .filter(n => !isNaN(n));
+        if (wpIds.length > 0) {
+          nextIdRef.current = Math.max(...wpIds) + 1;
+        }
+
+        // Center camera
+        if (loadedWps.length > 0) {
+          const sumX = loadedWps.reduce((sum, wp) => sum + wp.px, 0);
+          const sumY = loadedWps.reduce((sum, wp) => sum + wp.py, 0);
+          const avgX = sumX / loadedWps.length;
+          const avgY = sumY / loadedWps.length;
+          
+          const wrap = wrapRef.current;
+          if (wrap) {
+            const rect = wrap.getBoundingClientRect();
+            setCam({
+              x: rect.width / 2 - avgX,
+              y: rect.height / 2 - avgY,
+              z: 1,
+            });
+          }
+        }
+      } catch (error) {
+        console.error("Error loading store:", error);
+        alert("โหลดข้อมูลแผนที่ล้มเหลว");
+      }
+    };
+
+    loadStore();
+  }, [storeId]);
 
   /* ─── Keyboard shortcuts ───────────────────────────── */
   useEffect(() => {
@@ -858,8 +933,11 @@ export default function MapEditorScene({ mode }: { mode?: string } = {}) {
     }
 
     try {
-      const res = await fetch("/api/stores", {
-        method: "POST",
+      const url = storeId ? `/api/stores/${storeId}` : "/api/stores";
+      const method = storeId ? "PUT" : "POST";
+
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id: mapId,
@@ -870,7 +948,7 @@ export default function MapEditorScene({ mode }: { mode?: string } = {}) {
           waypointsJson: JSON.stringify(wpObj),
           edgesJson: JSON.stringify(edgeArr),
           destinationsJson: JSON.stringify(dests),
-          comment: "สร้างจากโหมดวาด Canvas",
+          comment: storeId ? "แก้ไขจากโหมดวาด Canvas" : "สร้างจากโหมดวาด Canvas",
         }),
       });
       if (!res.ok) throw new Error();

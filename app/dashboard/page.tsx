@@ -2,10 +2,11 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import NavbarUser from "@/components/NavbarUser";
-import { Navigation, Plus, Map, Settings, BarChart3, ArrowRight } from "lucide-react";
+import { Navigation, Plus, Map, Settings, BarChart3, ArrowRight, Pencil } from "lucide-react";
 import { db } from "@/lib/db";
 import { stores } from "@/lib/schema";
 import { eq } from "drizzle-orm";
+import DeleteStoreBtn from "@/components/DeleteStoreBtn";
 
 export default async function DashboardPage() {
   const { userId } = await auth();
@@ -147,13 +148,23 @@ export default async function DashboardPage() {
                       <span className="text-xs text-slate-500">
                         สร้างเมื่อ: {store.createdAt ? new Date(store.createdAt).toLocaleDateString("th-TH") : "—"}
                       </span>
-                      <Link 
-                        href={`/ar?store=${store.id}`}
-                        className="inline-flex items-center gap-1.5 rounded-xl bg-purple-600/20 px-4 py-2.5 text-sm font-bold text-purple-300 hover:bg-purple-600 hover:text-white transition-all duration-200"
-                      >
-                        เปิดกล้อง AR
-                        <ArrowRight className="h-4 w-4" />
-                      </Link>
+                      <div className="flex items-center gap-2">
+                        <Link
+                          href={`/dashboard/record/blueprint?store=${store.id}`}
+                          className="p-2.5 rounded-xl border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white transition"
+                          title="แก้ไขแผนที่"
+                        >
+                          <Pencil size={16} />
+                        </Link>
+                        <DeleteStoreBtn storeId={store.id} storeName={store.name} />
+                        <Link 
+                          href={`/ar?store=${store.id}`}
+                          className="inline-flex items-center gap-1.5 rounded-xl bg-purple-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-purple-500 transition-all duration-200"
+                        >
+                          เปิดกล้อง AR
+                          <ArrowRight className="h-4 w-4" />
+                        </Link>
+                      </div>
                     </div>
                   </div>
                 );
