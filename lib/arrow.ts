@@ -79,7 +79,7 @@ export class NavigationArrow {
   }
   
   updatePosition(cameraPosition: THREE.Vector3, cameraQuaternion: THREE.Quaternion) {
-    const distance = 1.5;
+    const distance = 2.8;
     const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(cameraQuaternion);
     forward.y = 0;
     forward.normalize();

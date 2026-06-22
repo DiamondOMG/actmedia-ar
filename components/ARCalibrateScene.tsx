@@ -11,7 +11,9 @@ declare const XR8: any;
 declare const XRExtras: any;
 
 let rawCameraPos = new THREE.Vector3();
+let rawCameraQuat = new THREE.Quaternion();
 let startPos = new THREE.Vector3(0, 0, 0);
+let startYaw = 0;
 
 const initCalibratePipelineModule = (onUpdateCb: () => void) => {
   return {
@@ -71,6 +73,7 @@ const initCalibratePipelineModule = (onUpdateCb: () => void) => {
       if (!camera) return;
 
       rawCameraPos.copy(camera.position);
+      rawCameraQuat.copy(camera.quaternion);
 
       // อัปเดตพิกัดลง positionProvider ตามปกติ
       positionProvider.updateFromSlam(camera.position, camera.quaternion);
@@ -87,6 +90,7 @@ export default function ARCalibrateScene() {
   const [isCalibrating, setIsCalibrating] = useState(false);
   const [slamDistance, setSlamDistance] = useState(0);
   const [scaleFactor, setScaleFactor] = useState(1.0);
+  const [currentHeadingDiff, setCurrentHeadingDiff] = useState(0);
   const [showInstruction, setShowInstruction] = useState(true);
 
 
@@ -112,6 +116,16 @@ export default function ARCalibrateScene() {
         const dz = rawCameraPos.z - startPos.z;
         const dist = Math.sqrt(dx * dx + dz * dz);
         setSlamDistance(dist);
+
+        // คำนวณความต่างของมุมหันหน้า (Yaw) ของกล้องเทียบจุดเริ่มต้น
+        const euler = new THREE.Euler().setFromQuaternion(rawCameraQuat, 'YXZ');
+        let diff = euler.y - startYaw;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        
+        let deg = -diff * 180 / Math.PI; 
+        deg = (deg + 360) % 360;
+        setCurrentHeadingDiff(deg);
       };
 
       XR8.addCameraPipelineModules([
@@ -147,7 +161,10 @@ export default function ARCalibrateScene() {
       XR8.XrController.recenter();
     }
     startPos.copy(rawCameraPos);
+    const euler = new THREE.Euler().setFromQuaternion(rawCameraQuat, 'YXZ');
+    startYaw = euler.y;
     setSlamDistance(0);
+    setCurrentHeadingDiff(0);
     setIsCalibrating(true);
   };
 
@@ -239,6 +256,21 @@ export default function ARCalibrateScene() {
               {(slamDistance * scaleFactor).toFixed(2)}<span className="text-xs font-normal text-slate-400 ml-1">ม.</span>
             </div>
             <div className="text-[9px] text-slate-500 mt-1.5">ตัวคูณปัจจุบัน: {scaleFactor.toFixed(3)}</div>
+          </div>
+        </div>
+
+        {/* แถบวัดมุมและการหมุน */}
+        <div className="bg-white/5 border border-white/5 rounded-2xl p-4 flex items-center justify-between">
+          <div className="text-left">
+            <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mb-1">มุมหมุนกล้อง (Heading)</div>
+            <div className="text-2xl font-black text-amber-400 font-mono leading-none">
+              {currentHeadingDiff.toFixed(1)}°
+            </div>
+            <div className="text-[9px] text-slate-500 mt-1.5">เทียบกับทิศทางเริ่มต้นตอนกดเริ่ม</div>
+          </div>
+          <div className="text-right text-[10px] text-slate-400 leading-relaxed max-w-[150px]">
+            หันขวา = องศาเพิ่มขึ้น<br />
+            ลองหมุนตัว 360° เพื่อดูค่าเบี่ยงเบน
           </div>
         </div>
 
