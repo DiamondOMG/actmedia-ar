@@ -21,7 +21,7 @@ interface WP {
   headingDeg?: number;
 }
 interface Ed { from: string; to: string; meters?: number }
-type Tool = "pan" | "waypoint" | "edge" | "angle";
+type Tool = "pan" | "waypoint" | "edge" | "angle" | "eraser";
 
 /* ─── Constants ──────────────────────────────────────── */
 const WP_R = 14;       // waypoint hit radius (screen px)
@@ -73,6 +73,14 @@ export default function MapEditorScene() {
   const [selEdge, setSelEdge] = useState<number | null>(null);
 
   // Ruler/Angle state
+  interface AngleLock {
+    id: string;
+    sharedWpId: string;
+    wp1Id: string;
+    wp2Id: string;
+    deg: number;
+  }
+  const [angleLocks, setAngleLocks] = useState<AngleLock[]>([]);
   const [rulerEdges, setRulerEdges] = useState<number[]>([]);
   const [showAngle, setShowAngle] = useState(false);
   const [angleVal, setAngleVal] = useState("");
@@ -139,6 +147,32 @@ export default function MapEditorScene() {
     return null;
   }, [wps, eds, cam.z]);
 
+  const hitAngleLock = useCallback((wx: number, wy: number): AngleLock | null => {
+    for (const lock of angleLocks) {
+      const s = wps.find(w => w.id === lock.sharedWpId);
+      const f1 = wps.find(w => w.id === lock.wp1Id);
+      const f2 = wps.find(w => w.id === lock.wp2Id);
+      if (!s || !f1 || !f2) continue;
+
+      const d = Math.hypot(wx - s.px, wy - s.py);
+      const screenDist = d * cam.z;
+
+      if (screenDist >= 10 && screenDist <= 40) {
+        const a1 = Math.atan2(f1.py - s.py, f1.px - s.px);
+        const a2 = Math.atan2(f2.py - s.py, f2.px - s.px);
+        const am = Math.atan2(wy - s.py, wx - s.px);
+
+        const minRaw = Math.min(a1, a2);
+        const maxRaw = Math.max(a1, a2);
+
+        if (am >= minRaw && am <= maxRaw) {
+          return lock;
+        }
+      }
+    }
+    return null;
+  }, [wps, angleLocks, cam.z]);
+
   /* ─── Push undo snapshot ───────────────────────────── */
   const pushHist = useCallback(() => {
     histRef.current.push({ w: structuredClone(wps), e: structuredClone(eds) });
@@ -200,14 +234,15 @@ export default function MapEditorScene() {
       const rulerSel = rulerEdges.includes(i);
       const isSelected = sel || rulerSel;
       const cal = e.meters != null;
+      const isEraserHover = tool === "eraser" && mousePos && hitEdge(mousePos.x, mousePos.y) === i;
 
-      // Glow for selected edges
-      if (isSelected) {
+      // Glow for selected/hovered edges
+      if (isSelected || isEraserHover) {
         ctx.save();
         ctx.beginPath();
         ctx.moveTo(a.px, a.py);
         ctx.lineTo(b.px, b.py);
-        ctx.strokeStyle = rulerSel ? "rgba(245,158,11,0.4)" : "rgba(168,85,247,0.4)";
+        ctx.strokeStyle = isEraserHover ? "rgba(239,68,68,0.4)" : rulerSel ? "rgba(245,158,11,0.4)" : "rgba(168,85,247,0.4)";
         ctx.lineWidth = 14 / cam.z;
         ctx.stroke();
         ctx.restore();
@@ -216,8 +251,8 @@ export default function MapEditorScene() {
       ctx.beginPath();
       ctx.moveTo(a.px, a.py);
       ctx.lineTo(b.px, b.py);
-      ctx.strokeStyle = isSelected ? (rulerSel ? "#f59e0b" : "#a855f7") : cal ? "#22c55e" : "#64748b";
-      ctx.lineWidth = (isSelected ? 4 : 2.5) / cam.z;
+      ctx.strokeStyle = isEraserHover ? "#ef4444" : isSelected ? (rulerSel ? "#f59e0b" : "#a855f7") : cal ? "#22c55e" : "#64748b";
+      ctx.lineWidth = (isSelected || isEraserHover ? 4 : 2.5) / cam.z;
       ctx.stroke();
 
       // Distance label
@@ -229,7 +264,7 @@ export default function MapEditorScene() {
       if (label) {
         const fs = Math.max(10, 13 / cam.z);
         ctx.font = `bold ${fs}px sans-serif`;
-        ctx.fillStyle = cal ? "#22c55e" : "#c4b5fd";
+        ctx.fillStyle = isEraserHover ? "#f87171" : cal ? "#22c55e" : "#c4b5fd";
         ctx.textAlign = "center";
         ctx.fillText(label, (a.px + b.px) / 2, (a.py + b.py) / 2 - 10 / cam.z);
       }
@@ -311,13 +346,14 @@ export default function MapEditorScene() {
       const first = i === 0;
       const isQr = wp.type === "qr_checkpoint";
       const isDest = wp.type === "destination";
+      const isEraserHover = tool === "eraser" && mousePos && hitWP(mousePos.x, mousePos.y)?.id === wp.id;
 
       ctx.beginPath();
       ctx.arc(wp.px, wp.py, r, 0, Math.PI * 2);
-      ctx.fillStyle = first ? "#3b82f6" : isQr ? "#f59e0b" : isDest ? "#ec4899" : "#8b5cf6";
+      ctx.fillStyle = isEraserHover ? "#ef4444" : first ? "#3b82f6" : isQr ? "#f59e0b" : isDest ? "#ec4899" : "#8b5cf6";
       ctx.fill();
-      ctx.strokeStyle = isQr ? "#fbbf24" : "#fff";
-      ctx.lineWidth = (isQr ? 3 : 2) / cam.z;
+      ctx.strokeStyle = isEraserHover ? "#f87171" : isQr ? "#fbbf24" : "#fff";
+      ctx.lineWidth = (isEraserHover ? 4 : isQr ? 3 : 2) / cam.z;
       ctx.stroke();
 
       // ID label
@@ -340,9 +376,32 @@ export default function MapEditorScene() {
       }
     });
 
+    // Draw Locked Angles
+    angleLocks.forEach(lock => {
+      const s = wps.find(w => w.id === lock.sharedWpId);
+      const f1 = wps.find(w => w.id === lock.wp1Id);
+      const f2 = wps.find(w => w.id === lock.wp2Id);
+      if (s && f1 && f2) {
+        const isEraserHover = tool === "eraser" && mousePos && hitAngleLock(mousePos.x, mousePos.y)?.id === lock.id;
+        const a1 = Math.atan2(f1.py - s.py, f1.px - s.px);
+        const a2 = Math.atan2(f2.py - s.py, f2.px - s.px);
+        const arcR = 25 / cam.z;
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(s.px, s.py, arcR, Math.min(a1, a2), Math.max(a1, a2));
+        ctx.strokeStyle = isEraserHover ? "rgba(239,68,68,0.9)" : "rgba(245,158,11,0.6)";
+        ctx.lineWidth = (isEraserHover ? 3.5 : 2) / cam.z;
+        if (!isEraserHover) {
+          ctx.setLineDash([2 / cam.z, 2 / cam.z]);
+        }
+        ctx.stroke();
+        ctx.restore();
+      }
+    });
+
     ctx.restore();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wps, eds, cam, bg, selEdge, edgeFrom, ppm, tick, rulerEdges, tool, mousePos]);
+  }, [wps, eds, cam, bg, selEdge, edgeFrom, ppm, tick, rulerEdges, tool, mousePos, angleLocks]);
 
   /* ─── Init camera center ───────────────────────────── */
   useEffect(() => {
@@ -364,6 +423,17 @@ export default function MapEditorScene() {
   /* ─── Keyboard shortcuts ───────────────────────────── */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "SELECT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
       if (e.ctrlKey && e.key === "z") {
         e.preventDefault();
         const snap = histRef.current.pop();
@@ -381,12 +451,23 @@ export default function MapEditorScene() {
       if (e.key === "Delete" || e.key === "Backspace") {
         if (selEdge !== null) {
           pushHist();
+          const edgeToDelete = eds[selEdge];
           setEds(prev => prev.filter((_, i) => i !== selEdge));
+          
+          // ลบล็อกมุมที่ใช้ edge นี้
+          setAngleLocks(prev => prev.filter(lock => {
+            const isEdge1 = (edgeToDelete.from === lock.sharedWpId && edgeToDelete.to === lock.wp1Id) || (edgeToDelete.to === lock.sharedWpId && edgeToDelete.from === lock.wp1Id);
+            const isEdge2 = (edgeToDelete.from === lock.sharedWpId && edgeToDelete.to === lock.wp2Id) || (edgeToDelete.to === lock.sharedWpId && edgeToDelete.from === lock.wp2Id);
+            return !isEdge1 && !isEdge2;
+          }));
           setSelEdge(null);
         } else if (selWpId !== null) {
           pushHist();
           setWps(prev => prev.filter(w => w.id !== selWpId));
           setEds(prev => prev.filter(x => x.from !== selWpId && x.to !== selWpId));
+          
+          // ลบล็อกมุมที่ใช้ waypoint นี้
+          setAngleLocks(prev => prev.filter(l => l.sharedWpId !== selWpId && l.wp1Id !== selWpId && l.wp2Id !== selWpId));
           if (edgeFrom === selWpId) setEdgeFrom(null);
           setSelWpId(null);
         }
@@ -394,7 +475,7 @@ export default function MapEditorScene() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selEdge, selWpId, edgeFrom]);
+  }, [selEdge, selWpId, edgeFrom, eds]);
 
   /* ─── Zoom (native wheel, passive: false) ──────────── */
   useEffect(() => {
@@ -539,6 +620,42 @@ export default function MapEditorScene() {
       }
       return;
     }
+
+    // Eraser tool: delete waypoint, edge, or angle lock
+    if (tool === "eraser") {
+      const wp = hitWP(w.x, w.y);
+      if (wp) {
+        pushHist();
+        setWps(prev => prev.filter(x => x.id !== wp.id));
+        setEds(prev => prev.filter(x => x.from !== wp.id && x.to !== wp.id));
+        setAngleLocks(prev => prev.filter(l => l.sharedWpId !== wp.id && l.wp1Id !== wp.id && l.wp2Id !== wp.id));
+        if (edgeFrom === wp.id) setEdgeFrom(null);
+        return;
+      }
+
+      const ei = hitEdge(w.x, w.y);
+      if (ei !== null) {
+        pushHist();
+        const edgeToDelete = eds[ei];
+        setEds(prev => prev.filter((_, idx) => idx !== ei));
+        setAngleLocks(prev => prev.filter(lock => {
+          const isEdge1 = (edgeToDelete.from === lock.sharedWpId && edgeToDelete.to === lock.wp1Id) || (edgeToDelete.to === lock.sharedWpId && edgeToDelete.from === lock.wp1Id);
+          const isEdge2 = (edgeToDelete.from === lock.sharedWpId && edgeToDelete.to === lock.wp2Id) || (edgeToDelete.to === lock.sharedWpId && edgeToDelete.from === lock.wp2Id);
+          return !isEdge1 && !isEdge2;
+        }));
+        return;
+      }
+
+      const lock = hitAngleLock(w.x, w.y);
+      if (lock) {
+        pushHist();
+        setAngleLocks(prev => prev.filter(l => l.id !== lock.id));
+        return;
+      }
+
+      panRef.current = { active: true, sx: e.clientX, sy: e.clientY, cx: cam.x, cy: cam.y, moved: false };
+      return;
+    }
   };
 
   /* ─── Pointer move ─────────────────────────────────── */
@@ -640,13 +757,43 @@ export default function MapEditorScene() {
     if (isNaN(m) || m <= 0 || selEdge === null) return;
 
     const e = eds[selEdge];
+
+    // ตรวจเช็คว่ามีมุมไหนที่เกี่ยวข้องล็อกอยู่หรือไม่
+    const hasLock = angleLocks.some(lock => {
+      const isEdge1 = (e.from === lock.sharedWpId && e.to === lock.wp1Id) || (e.to === lock.sharedWpId && e.from === lock.wp1Id);
+      const isEdge2 = (e.from === lock.sharedWpId && e.to === lock.wp2Id) || (e.to === lock.sharedWpId && e.from === lock.wp2Id);
+      return isEdge1 || isEdge2;
+    });
+
+    if (hasLock && ppm !== null) {
+      alert("⚠️ ไม่สามารถปรับระยะเส้นนี้ได้เนื่องจากติดเงื่อนไขการล็อกมุมอยู่!\nกรุณาไปลบเงื่อนไขมุมออกก่อน");
+      return;
+    }
+
     const a = wps.find(w => w.id === e.from);
     const b = wps.find(w => w.id === e.to);
     if (!a || !b) return;
 
-    const newPpm = Math.hypot(b.px - a.px, b.py - a.py) / m;
-    setEds(prev => prev.map((ed, i) => i === selEdge ? { ...ed, meters: m } : ed));
-    setPpm(newPpm);
+    pushHist();
+
+    if (ppm === null) {
+      // ตั้งค่าสเกลแผนที่ครั้งแรก
+      const newPpm = Math.hypot(b.px - a.px, b.py - a.py) / m;
+      setEds(prev => prev.map((ed, i) => i === selEdge ? { ...ed, meters: m } : ed));
+      setPpm(newPpm);
+    } else {
+      // ปรับขนาดความยาวจริงใน UI (ขยับจุด b)
+      const dx = b.px - a.px;
+      const dy = b.py - a.py;
+      const curDist = Math.hypot(dx, dy);
+      if (curDist > 0) {
+        const targetDist = m * ppm;
+        const ratio = targetDist / curDist;
+        setWps(prev => prev.map(w => w.id === b.id ? { ...w, px: a.px + dx * ratio, py: a.py + dy * ratio } : w));
+        setEds(prev => prev.map((ed, i) => i === selEdge ? { ...ed, meters: m } : ed));
+      }
+    }
+
     setShowDist(false);
     setSelEdge(null);
   };
@@ -766,6 +913,37 @@ export default function MapEditorScene() {
         ? { ...w, px: s.px + dist2 * Math.cos(newAngle), py: s.py + dist2 * Math.sin(newAngle) }
         : w
     ));
+
+    // บันทึกเงื่อนไขล็อกมุม
+    const lockId = `lock_${sharedId}_${f1Id}_${f2Id}`;
+    const newLock: AngleLock = {
+      id: lockId,
+      sharedWpId: sharedId,
+      wp1Id: f1Id,
+      wp2Id: f2Id,
+      deg: targetDeg
+    };
+    setAngleLocks(prev => [...prev.filter(l => l.id !== lockId), newLock]);
+
+    setShowAngle(false);
+    setRulerEdges([]);
+  };
+
+  /* ─── Remove Angle Lock handler ────────────────────── */
+  const handleRemoveAngleLock = () => {
+    if (rulerEdges.length !== 2) return;
+    const e1 = eds[rulerEdges[0]], e2 = eds[rulerEdges[1]];
+    const sharedId = findSharedWP(e1, e2);
+    if (!sharedId) return;
+
+    const f1Id = e1.from === sharedId ? e1.to : e1.from;
+    const f2Id = e2.from === sharedId ? e2.to : e2.from;
+
+    const lockId = `lock_${sharedId}_${f1Id}_${f2Id}`;
+    const lockIdAlt = `lock_${sharedId}_${f2Id}_${f1Id}`;
+
+    pushHist();
+    setAngleLocks(prev => prev.filter(l => l.id !== lockId && l.id !== lockIdAlt));
     setShowAngle(false);
     setRulerEdges([]);
   };
@@ -826,6 +1004,7 @@ export default function MapEditorScene() {
           <ToolBtn icon={<MapPin size={18} />} active={tool === "waypoint"} onClick={() => { setTool("waypoint"); setEdgeFrom(null); setRulerEdges([]); }} title="ปักจุด / ตั้งค่าจุด (Waypoint)" />
           <ToolBtn icon={<Pencil size={18} />} active={tool === "edge"} onClick={() => { setTool("edge"); setRulerEdges([]); }} title="เชื่อมเส้น / ใส่ระยะ (Edge)" />
           <ToolBtn icon={<DraftingCompass size={18} />} active={tool === "angle"} onClick={() => { setTool("angle"); setEdgeFrom(null); setRulerEdges([]); }} title="จัดระเบียบมุม (Angle)" />
+          <ToolBtn icon={<Trash2 size={18} />} active={tool === "eraser"} onClick={() => { setTool("eraser"); setEdgeFrom(null); setRulerEdges([]); }} title="เครื่องมือลบ (Eraser)" danger />
 
           <div className="flex-1" />
 
@@ -840,7 +1019,15 @@ export default function MapEditorScene() {
             onClick={() => {
               if (selEdge !== null) {
                 pushHist();
+                const edgeToDelete = eds[selEdge];
                 setEds(prev => prev.filter((_, i) => i !== selEdge));
+                
+                // ลบล็อกมุมที่ใช้ edge นี้
+                setAngleLocks(prev => prev.filter(lock => {
+                  const isEdge1 = (edgeToDelete.from === lock.sharedWpId && edgeToDelete.to === lock.wp1Id) || (edgeToDelete.to === lock.sharedWpId && edgeToDelete.from === lock.wp1Id);
+                  const isEdge2 = (edgeToDelete.from === lock.sharedWpId && edgeToDelete.to === lock.wp2Id) || (edgeToDelete.to === lock.sharedWpId && edgeToDelete.from === lock.wp2Id);
+                  return !isEdge1 && !isEdge2;
+                }));
                 setSelEdge(null);
               }
             }}
@@ -910,6 +1097,7 @@ export default function MapEditorScene() {
               onChange={e => setDistVal(e.target.value)}
               onKeyDown={e => e.key === "Enter" && handleDistSubmit()}
               placeholder="เช่น 10"
+              style={{ boxSizing: "border-box" }}
               className="w-full bg-slate-700 border-2 border-transparent focus:border-purple-500 rounded-xl px-4 py-3 text-white text-lg font-mono outline-none transition mb-3"
             />
             <p className="text-xs text-slate-400 mb-4">
@@ -945,6 +1133,7 @@ export default function MapEditorScene() {
                 onChange={e => setMapName(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && handleSave()}
                 placeholder="เช่น เซ็นทรัลลาดพร้าว"
+                style={{ boxSizing: "border-box" }}
                 className="w-full bg-slate-100 border-2 border-transparent rounded-xl px-4 py-3 text-slate-900 focus:outline-none focus:border-purple-500 transition font-medium text-lg"
               />
             </div>
@@ -958,6 +1147,7 @@ export default function MapEditorScene() {
                 onChange={e => setProximityRadius(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && handleSave()}
                 placeholder="เช่น 1.5"
+                style={{ boxSizing: "border-box" }}
                 className="w-full bg-slate-100 border-2 border-transparent rounded-xl px-4 py-3 text-slate-900 focus:outline-none focus:border-purple-500 transition font-medium text-lg font-mono"
               />
             </div>
@@ -988,6 +1178,7 @@ export default function MapEditorScene() {
                   setWpType(val);
                   if (val === "qr_checkpoint" && wpHeading === "0") setWpHeading("0");
                 }}
+                style={{ boxSizing: "border-box" }}
                 className="w-full bg-slate-700 text-white rounded-xl px-3 py-2 text-sm outline-none border border-slate-600 focus:border-purple-500 font-sans"
               >
                 <option value="turn">จุดเลี้ยวทั่วไป (Turn)</option>
@@ -1003,6 +1194,7 @@ export default function MapEditorScene() {
                 value={wpLabel}
                 onChange={e => setWpLabel(e.target.value)}
                 placeholder="เช่น Starbucks"
+                style={{ boxSizing: "border-box" }}
                 className="w-full bg-slate-700 text-white rounded-xl px-3 py-2 text-sm outline-none border border-slate-600 focus:border-purple-500 font-medium font-sans"
               />
             </div>
@@ -1017,6 +1209,7 @@ export default function MapEditorScene() {
                   value={wpHeading}
                   onChange={e => setWpHeading(e.target.value)}
                   placeholder="เช่น 90"
+                  style={{ boxSizing: "border-box" }}
                   className="w-full bg-slate-700 text-white rounded-xl px-3 py-2 text-sm outline-none border border-slate-600 focus:border-purple-500 font-mono"
                 />
               </div>
@@ -1065,18 +1258,39 @@ export default function MapEditorScene() {
               onChange={e => setAngleVal(e.target.value)}
               onKeyDown={e => e.key === "Enter" && handleAngleSubmit()}
               placeholder="เช่น 90"
+              style={{ boxSizing: "border-box" }}
               className="w-full bg-slate-700 border-2 border-transparent focus:border-amber-500 rounded-xl px-4 py-3 text-white text-lg font-mono outline-none transition mb-3"
             />
             <p className="text-xs text-slate-400 mb-4 font-sans">
               ระบบจะหมุนปลายเส้นที่ 2 ให้ได้มุมตามที่กำหนด
             </p>
-            <div className="flex gap-3">
-              <button onClick={() => { setShowAngle(false); setRulerEdges([]); }} className="flex-1 py-2.5 bg-slate-700 hover:bg-slate-600 rounded-xl font-bold transition font-sans">
-                ยกเลิก
-              </button>
-              <button onClick={handleAngleSubmit} className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-900 rounded-xl font-bold transition font-sans">
-                ปรับมุม
-              </button>
+            <div className="flex flex-col gap-2">
+              <div className="flex gap-3">
+                <button onClick={() => { setShowAngle(false); setRulerEdges([]); }} className="flex-1 py-2.5 bg-slate-700 hover:bg-slate-600 rounded-xl font-bold transition font-sans">
+                  ยกเลิก
+                </button>
+                <button onClick={handleAngleSubmit} className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-900 rounded-xl font-bold transition font-sans">
+                  ปรับมุม
+                </button>
+              </div>
+
+              {/* ปุ่มลบเงื่อนไขล็อกมุม */}
+              {angleLocks.some(l => {
+                if (rulerEdges.length !== 2) return false;
+                const e1 = eds[rulerEdges[0]], e2 = eds[rulerEdges[1]];
+                const shared = findSharedWP(e1, e2);
+                if (!shared) return false;
+                const f1 = e1.from === shared ? e1.to : e1.from;
+                const f2 = e2.from === shared ? e2.to : e2.from;
+                return l.sharedWpId === shared && ((l.wp1Id === f1 && l.wp2Id === f2) || (l.wp1Id === f2 && l.wp2Id === f1));
+              }) && (
+                <button
+                  onClick={handleRemoveAngleLock}
+                  className="w-full py-2 bg-red-950/40 hover:bg-red-900/60 text-red-400 border border-red-900/40 rounded-xl text-xs font-semibold transition font-sans mt-1"
+                >
+                  🔓 ลบเงื่อนไขมุมของจุดนี้
+                </button>
+              )}
             </div>
           </div>
         </div>

@@ -33,8 +33,9 @@ export const initScenePipelineModule = (storeData: StoreData | null) => {
     navArrow = new NavigationArrow(scene, { color: '#AD50FF', animation: 'bounce' });
 
     if (storeData) {
+      const startId = positionProvider.nav_start_id || 'W1';
       const targetId = positionProvider.nav_target_id || 'W5';
-      const path = findShortestPath(storeData.waypoints, storeData.edges, 'W1', targetId);
+      const path = findShortestPath(storeData.waypoints, storeData.edges, startId, targetId);
       if (path) {
         currentPath = path;
         currentWaypointIndex = 1;
@@ -88,7 +89,8 @@ export const initScenePipelineModule = (storeData: StoreData | null) => {
 
       // Update target if user picked a new destination dynamically
       if (storeData && positionProvider.nav_target_id && currentPath.length > 0 && currentPath[currentPath.length - 1] !== positionProvider.nav_target_id) {
-        const newPath = findShortestPath(storeData.waypoints, storeData.edges, 'W1', positionProvider.nav_target_id);
+        const startId = positionProvider.nav_start_id || 'W1';
+        const newPath = findShortestPath(storeData.waypoints, storeData.edges, startId, positionProvider.nav_target_id);
         if (newPath) {
           currentPath = newPath;
           currentWaypointIndex = 1;

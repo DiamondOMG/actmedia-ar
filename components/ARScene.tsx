@@ -54,8 +54,26 @@ export default function ARScene() {
         if (data.initial_heading_deg) {
           positionProvider.setHeadingOffset(data.initial_heading_deg);
         }
-        // เลือก destination จุดที่ 5 เป็น default เพื่อให้ลูกศรขึ้นทันที
-        if (data.destinations && data.destinations.length > 0) {
+
+        // ดึง startId จาก URL (ถ้ามี)
+        const urlStart = searchParams.get("start");
+        if (urlStart && data.waypoints[urlStart]) {
+          positionProvider.nav_start_id = urlStart;
+        } else {
+          positionProvider.nav_start_id = "W1";
+        }
+
+        // ดึง targetId จาก URL (ถ้ามี)
+        const urlTarget = searchParams.get("target");
+        if (urlTarget && data.waypoints[urlTarget]) {
+          const dest = data.destinations?.find((d: any) => d.waypoint === urlTarget) || {
+            waypoint: urlTarget,
+            name: `จุดหมาย ${urlTarget}`,
+            icon: "🏪"
+          };
+          setSelectedTarget(dest);
+          positionProvider.nav_target_id = urlTarget;
+        } else if (data.destinations && data.destinations.length > 0) {
           const defaultIndex = Math.min(4, data.destinations.length - 1);
           const defaultDest = data.destinations[defaultIndex];
           setSelectedTarget(defaultDest);
