@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { loadStoreData, StoreData } from "@/lib/store-loader";
-import { positionProvider } from "@/lib/position-provider";
+import { loadStoreData, StoreData } from "@/lib/ar-navigate/store_loader";
+import { positionProvider } from "@/lib/ar-core/position_provider";
 import { initScenePipelineModule } from "@/lib/scene-init";
 import { Menu, X, MapPin, Home } from "lucide-react";
 

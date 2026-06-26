@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { auth } from "@clerk/nextjs/server";
 import { Navigation, LogIn, UserPlus, ArrowRight, MapPin, Compass, Layers } from "lucide-react";
-import NavbarUser from "@/components/NavbarUser";
+import NavbarUser from "@/components/shared-ui/navbar_user";
 
 export default async function Home() {
   const { userId } = await auth();
@@ -102,11 +102,17 @@ export default async function Home() {
               </Link>
             )}
             <Link
-              href="/ar?store=demo_001"
+              href="/ar/navigate?store=demo_001"
               className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-8 py-3.5 text-base font-medium text-slate-300 transition hover:bg-white/10 hover:text-white"
             >
               <MapPin className="h-4 w-4" />
-              ทดลองเปิด AR
+              ทดลองนำทาง AR
+            </Link>
+            <Link
+              href="/ar/basketball"
+              className="flex items-center gap-2 rounded-xl border border-purple-500/30 bg-purple-500/10 px-8 py-3.5 text-base font-medium text-purple-300 transition hover:bg-purple-500/20 hover:text-white"
+            >
+              🏀 เล่นเกมโยนบาส AR
             </Link>
           </div>
         </div>

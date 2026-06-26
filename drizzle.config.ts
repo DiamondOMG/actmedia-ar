@@ -5,7 +5,7 @@ import * as dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
 
 export default defineConfig({
-  schema: "./lib/schema.ts",
+  schema: "./lib/ar-core/schema.ts",
   out: "./drizzle",
   dialect: "turso",
   dbCredentials: {

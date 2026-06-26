@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 
-const ARRecordScene = dynamic(() => import("@/components/ARRecordScene"), {
+const ARRecordScene = dynamic(() => import("@/components/ar-navigate/ar_record_scene"), {
   ssr: false,
   loading: () => (
     <div className="flex h-screen w-full flex-col items-center justify-center bg-slate-950 text-white font-sans">

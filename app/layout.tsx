@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import Script from "next/script";
-import XRGuard from "@/components/XRGuard";
+import XRGuard from "@/components/ar-core/xr_guard";
 import "./globals.css";
 
 const geistSans = Geist({

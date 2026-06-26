@@ -1,4 +1,4 @@
-import { Waypoint } from './store-loader';
+import { Waypoint } from './store_loader';
 
 export function getDistance(wp1: Waypoint, wp2: Waypoint): number {
   const dx = wp1.x - wp2.x;

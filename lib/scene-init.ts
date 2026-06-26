@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import { positionProvider } from './position-provider';
-import { NavigationArrow } from './arrow';
-import { findShortestPath, getDistance } from './navigation';
-import { StoreData } from './store-loader';
+import { positionProvider } from './ar-core/position_provider';
+import { NavigationArrow } from './ar-navigate/arrow';
+import { findShortestPath, getDistance } from './ar-navigate/navigation';
+import { StoreData } from './ar-navigate/store_loader';
 
 declare const XR8: any;
 

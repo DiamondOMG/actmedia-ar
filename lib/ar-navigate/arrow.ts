@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { positionProvider } from './position-provider';
-import { Waypoint } from './store-loader';
+import { positionProvider } from '../ar-core/position_provider';
+import { Waypoint } from './store_loader';
 
 export interface ArrowOptions {
   color?: string | number;
