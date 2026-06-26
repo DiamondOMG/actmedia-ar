@@ -83,9 +83,9 @@ export default function BasketballScene() {
   };
 
   return (
-    <div ref={containerRef} className="relative h-screen w-screen overflow-hidden bg-black font-sans">
-      {/* หน้าจอกล้อง AR */}
-      <canvas id="camerafeed" className="absolute inset-0 h-full w-full object-cover" />
+    <div ref={containerRef} className="absolute inset-0 w-full h-full bg-black overflow-hidden">
+      {/* ปล่อยให้ XRExtras.FullWindowCanvas จัดการขนาด canvas เต็มจอให้เอง */}
+      <canvas id="camerafeed"></canvas>
 
       {/* ───────── UI HUD (Heads-Up Display) ───────── */}
       <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-center p-4 bg-gradient-to-b from-black/60 to-transparent">
