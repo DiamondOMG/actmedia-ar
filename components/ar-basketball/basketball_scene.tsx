@@ -88,53 +88,19 @@ export default function BasketballScene() {
       <canvas id="camerafeed" className="absolute inset-0 h-full w-full object-cover" />
 
       {/* ───────── UI HUD (Heads-Up Display) ───────── */}
-      <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-between p-4 bg-gradient-to-b from-black/60 to-transparent">
-        {/* คะแนน */}
-        <div className="flex flex-col rounded-xl bg-slate-900/80 backdrop-blur border border-white/10 px-4 py-2 text-white">
-          <span className="text-xs text-slate-400 font-medium">SCORE</span>
-          <span className="text-2xl font-bold tracking-wider">{gameState.score}</span>
-        </div>
-
-        {/* ลูกบอลที่เหลือ */}
-        <div className="flex flex-col items-end rounded-xl bg-slate-900/80 backdrop-blur border border-white/10 px-4 py-2 text-white">
-          <span className="text-xs text-slate-400 font-medium">BALLS LEFT</span>
-          <span className="text-2xl font-bold tracking-wider">{gameState.ballsLeft}</span>
+      <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-center p-4 bg-gradient-to-b from-black/60 to-transparent">
+        <div className="flex flex-col items-center rounded-xl bg-slate-900/80 backdrop-blur border border-white/10 px-4 py-2 text-white">
+          <span className="text-xs text-purple-400 font-bold tracking-widest">AR PLATFORM PREVIEW</span>
+          <span className="text-lg font-bold">🏀 Basketball Hoop Mode</span>
         </div>
       </div>
 
-      {/* ข้อความแสดงผลขนาดยักษ์ตรงกลางจอเมื่อชู้ตลง/พลาด */}
-      {showStatus && (
-        <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none animate-ping duration-300">
-          <div className={`px-6 py-3 rounded-2xl text-2xl font-extrabold tracking-widest text-white shadow-2xl backdrop-blur-md ${
-            showStatus.includes("SCORED") ? "bg-emerald-500/80 border border-emerald-400" : "bg-rose-500/80 border border-rose-400"
-          }`}>
-            {showStatus}
-          </div>
-        </div>
-      )}
-
       {/* แนะนำวิธีการเล่นแบบกะทัดรัดด้านล่าง */}
-      {gameState.status === "idle" && (
-        <div className="absolute bottom-20 inset-x-0 z-10 flex justify-center pointer-events-none">
-          <p className="px-4 py-2 rounded-full bg-black/50 text-white text-xs font-semibold backdrop-blur border border-white/10">
-            แตะหรือคลิกบนหน้าจอเพื่อโยนลูกบาสไปยังห่วง 🏀
-          </p>
-        </div>
-      )}
-
-      {/* เกมโอเวอร์ */}
-      {gameState.ballsLeft === 0 && gameState.status === "idle" && (
-        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-slate-950/90 backdrop-blur p-6 text-center">
-          <h2 className="text-3xl font-black text-white mb-2">GAME OVER 🏆</h2>
-          <p className="text-lg text-slate-400 mb-6">คุณทำคะแนนได้ทั้งหมด {gameState.score} คะแนน!</p>
-          <button
-            onClick={handleReset}
-            className="flex items-center gap-2 rounded-xl bg-purple-600 hover:bg-purple-500 px-6 py-3 text-white font-bold transition shadow-lg shadow-purple-600/30"
-          >
-            <RotateCcw className="h-5 w-5" /> เล่นใหม่อีกครั้ง
-          </button>
-        </div>
-      )}
+      <div className="absolute bottom-20 inset-x-0 z-10 flex justify-center pointer-events-none">
+        <p className="px-4 py-2 rounded-full bg-black/60 text-white text-xs font-semibold backdrop-blur border border-white/10 text-center">
+          ห่วงบาส 3D จะลอยอยู่ห่างออกไป 3 เมตรจากจุดเริ่มต้น
+        </p>
+      </div>
 
       {/* ───────── ปุ่มควบคุมหลักด้านล่าง ───────── */}
       <div className="absolute bottom-4 left-4 right-4 z-10 flex items-center justify-between pointer-events-auto">
