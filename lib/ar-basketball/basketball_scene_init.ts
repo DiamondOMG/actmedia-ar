@@ -53,9 +53,12 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
 
   return {
     name: 'basketball-scene-init',
-    onStart: () => {
-      const { scene: xrScene } = XR8.Threejs.xrScene();
+    onStart: ({ canvas }: any) => {
+      const { scene: xrScene, camera, renderer } = XR8.Threejs.xrScene();
       scene = xrScene;
+
+      // ตั้งค่า shadow map
+      renderer.shadowMap.enabled = true;
 
       // 1. เพิ่มแสงสว่าง
       const ambientLight = new THREE.AmbientLight(0xffffff, 0.95);
@@ -70,6 +73,24 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
       hoopGroup.position.set(0, 1.2, hoopZ);
       scene.add(hoopGroup);
 
+      // ป้องกันการลากนิ้วเลื่อนหน้าเว็บ
+      canvas.addEventListener('touchmove', (e: Event) => e.preventDefault());
+
+      // สำคัญมาก: อัปเดต Projection Matrix ของกล้องให้ตรงกับพิกเซลของมือถือจริง เพื่อไม่ให้ภาพบิดเบี้ยวหรือหลุดขอบจอ
+      camera.position.set(0, 1.6, 0);
+      XR8.XrController.updateCameraProjectionMatrix({
+        origin: camera.position,
+        facing: camera.quaternion,
+      });
+
+      // แตะหน้าจอเพื่อ Recentering ตำแหน่งเริ่มต้นใหม่
+      const handleTouch = (e: TouchEvent) => {
+        if (e.touches.length === 1) {
+          XR8.XrController.recenter();
+        }
+      };
+      canvas.addEventListener('touchstart', handleTouch, true);
+
       // ส่งสถานะเริ่มต้นกลับไป UI
       onStateChange({ score: 0, ballsLeft: 10, status: 'idle' });
 
@@ -78,6 +99,7 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
         if (hoopGroup) {
           scene.remove(hoopGroup);
         }
+        canvas.removeEventListener('touchstart', handleTouch, true);
       };
     },
     onUpdate: () => {
