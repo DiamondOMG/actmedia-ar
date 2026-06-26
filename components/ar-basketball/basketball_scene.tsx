@@ -91,7 +91,7 @@ export default function BasketballScene() {
       <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-center p-4 bg-gradient-to-b from-black/60 to-transparent">
         <div className="flex flex-col items-center rounded-xl bg-slate-900/80 backdrop-blur border border-white/10 px-4 py-2 text-white">
           <span className="text-xs text-purple-400 font-bold tracking-widest">AR PLATFORM PREVIEW</span>
-          <span className="text-lg font-bold">🏀 Basketball Hoop Mode</span>
+          <span className="text-lg font-bold">🏀 Basketball Hoop Test Mode</span>
         </div>
       </div>
 
