@@ -71,9 +71,6 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
       hoopGroup.position.set(0, 0, hoopZ);
       scene.add(hoopGroup);
 
-      // ตั้งค่าเฟรม 8th Wall
-      XR8.Threejs.configureFrame();
-
       // ส่งสถานะเริ่มต้นกลับไป UI
       onStateChange({ score: 0, ballsLeft: 10, status: 'idle' });
 
