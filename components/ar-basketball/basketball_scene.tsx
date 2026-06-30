@@ -96,6 +96,10 @@ export default function BasketballScene() {
         y: touch.clientY,
         time: Date.now(),
       };
+      // แสดงเส้นนำวิถีเริ่มต้นทันทีที่ระดับแรงขั้นต่ำสุด (dy = 0)
+      if (typeof window !== "undefined" && (window as any).updateTrajectoryGuide) {
+        (window as any).updateTrajectoryGuide(0);
+      }
     }
   };
 
@@ -105,22 +109,22 @@ export default function BasketballScene() {
 
     if (e.touches.length === 1) {
       const touch = e.touches[0];
-      const dy = touchStartRef.current.y - touch.clientY; // ลากขึ้น dy จะเป็นบวก
+      const rawDy = touchStartRef.current.y - touch.clientY; // ลากขึ้น dy จะเป็นบวก
+      const dy = Math.max(rawDy, 0); // ไม่ให้แรงต่ำกว่า 0
 
-      if (dy > 10) {
-        if (typeof window !== "undefined" && (window as any).updateTrajectoryGuide) {
-          (window as any).updateTrajectoryGuide(dy);
-        }
+      if (typeof window !== "undefined" && (window as any).updateTrajectoryGuide) {
+        (window as any).updateTrajectoryGuide(dy);
       }
     }
   };
 
-  // ตรวจจับการปล่อยนิ้วและโยนลูกบาสตามระยะทาง Y
+  // ตรวจจับการปล่อยนิ้วและโยนลูกบาสตามระยะทาง Y ในทุกกรณี (Release to Shoot)
   const handleTouchEnd = (e: React.TouchEvent<HTMLCanvasElement>) => {
     if (!touchStartRef.current || gameState.status !== "idle" || !gameState.isHoopPlaced) return;
 
     const touch = e.changedTouches[0];
-    const dy = touchStartRef.current.y - touch.clientY; // ลากขึ้น dy จะเป็นบวก
+    const rawDy = touchStartRef.current.y - touch.clientY; // ลากขึ้น dy จะเป็นบวก
+    const dy = Math.max(rawDy, 0); // ไม่ให้แรงต่ำกว่า 0
 
     touchStartRef.current = null;
 
@@ -128,9 +132,6 @@ export default function BasketballScene() {
     if (typeof window !== "undefined" && (window as any).hideTrajectoryGuide) {
       (window as any).hideTrajectoryGuide();
     }
-
-    // ต้องปัดขึ้นด้านบนด้วยระยะอย่างน้อย 40px
-    if (dy < 40) return;
 
     if (typeof window !== "undefined" && (window as any).throwBasketball && (window as any).getShootVelocity) {
       const worldVelocity = (window as any).getShootVelocity(dy);

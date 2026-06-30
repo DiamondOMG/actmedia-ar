@@ -305,17 +305,39 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
  
         const tempPos = new THREE.Vector3().copy(ballMesh.position);
         const tempVel = new THREE.Vector3().copy(worldVelocity);
+        let actualPointsCount = 0;
  
         for (let i = 0; i < maxPoints; i++) {
           positions[i * 3] = tempPos.x;
           positions[i * 3 + 1] = tempPos.y;
           positions[i * 3 + 2] = tempPos.z;
+          actualPointsCount++;
  
+          // อัปเดตสมการฟิสิกส์จำลอง
           tempVel.y -= gravity * simDt;
           tempPos.addScaledVector(tempVel, simDt);
+ 
+          // จุดวิถีสิ้นสุดลงที่จุดสูงสุดของวิถีโค้ง (Apex) เมื่อความเร็วแกน Y สลับเป็นขาลง
+          if (tempVel.y < 0) {
+            break;
+          }
+        }
+ 
+        // เติมพิกัดจุดที่เหลือในบัฟเฟอร์การแสดงผลด้วยจุดพิกัดสูงสุดที่คำนวณได้ เพื่อความเสถียรของ WebGL
+        const lastIndex = actualPointsCount - 1;
+        const lastX = positions[lastIndex * 3];
+        const lastY = positions[lastIndex * 3 + 1];
+        const lastZ = positions[lastIndex * 3 + 2];
+        for (let i = actualPointsCount; i < maxPoints; i++) {
+          positions[i * 3] = lastX;
+          positions[i * 3 + 1] = lastY;
+          positions[i * 3 + 2] = lastZ;
         }
  
         trajectoryLine.geometry.attributes.position.needsUpdate = true;
+        
+        // สั่งวาดเส้นเฉพาะช่วงขาขึ้นจนถึงจุด Apex เท่านั้น
+        trajectoryLine.geometry.setDrawRange(0, actualPointsCount);
         trajectoryLine.visible = true;
       };
  
@@ -391,7 +413,6 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
           // หมุนหันหน้าของแป้นบาสเข้าหาตำแหน่งกล้อง (แนวระนาบ XZ)
           const camLookPos = new THREE.Vector3(camera.position.x, hoopGroup.position.y, camera.position.z);
           hoopGroup.lookAt(camLookPos);
-          hoopGroup.rotateY(Math.PI); // หมุน 180 องศาเพื่อกลับด้านหน้าแป้นเข้าหาคนมอง
  
           scene.add(hoopGroup);
           isHoopPlaced = true;
