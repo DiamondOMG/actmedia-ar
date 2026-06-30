@@ -39,6 +39,10 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
   let isAiming = false;
   let currentDy = 0;
  
+  // ตัวแปรปรับระดับความยาก Easy/Hard และตำแหน่งฐานแป้นบาส
+  let difficulty: 'easy' | 'hard' = 'easy';
+  const hoopBasePosition = new THREE.Vector3();
+ 
   const ballRadius = 0.06; // hitbox radius (เมตร)
   const ballModelScale = 0.062; // 0.06 / 0.97 (model radius)
   const ringRadius = 0.28;
@@ -138,6 +142,9 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
     // หันหน้าแป้นเข้าหาตำแหน่งกล้องแนวระนาบ
     const camLookPos = new THREE.Vector3(camera.position.x, hoopGroup.position.y, camera.position.z);
     hoopGroup.lookAt(camLookPos);
+ 
+    // บันทึกตำแหน่งฐานเริ่มต้น เพื่อนำไปใช้เคลื่อนไหวส่ายในโหมด HARD
+    hoopBasePosition.copy(hoopGroup.position);
  
     if (scene && !scene.children.includes(hoopGroup)) {
       scene.add(hoopGroup);
@@ -396,6 +403,15 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
         isDeviceAligned: false,
       });
  
+      // เพิ่มฟังก์ชันสำหรับ React ปรับระดับความยาก
+      (window as any).setDifficulty = (mode: 'easy' | 'hard') => {
+        difficulty = mode;
+        // หากเปลี่ยนกลับเป็น easy ให้เคลียร์ตำแหน่งแป้นกลับมาที่จุดฐานเริ่มต้นทันที
+        if (mode === 'easy' && hoopGroup && isHoopPlaced) {
+          hoopGroup.position.copy(hoopBasePosition);
+        }
+      };
+ 
       (window as any)._cleanupBasketball = () => {
         if (hoopGroup) scene.remove(hoopGroup);
         if (ballMesh) scene.remove(ballMesh);
@@ -406,6 +422,7 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
         delete (window as any).updateAimingDy;
         delete (window as any).stopAiming;
         delete (window as any).getShootVelocity;
+        delete (window as any).setDifficulty;
       };
     },
     onUpdate: () => {
@@ -430,6 +447,19 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
           resetBall();
         }
         return;
+      }
+ 
+      // ขยับส่ายแป้นบาสแนวราบช้าๆ ในพิกัด Local XY ของตัวห่วง เมื่อเปิดโหมด HARD
+      if (isHoopPlaced && difficulty === 'hard') {
+        const elapsedTime = clock.getElapsedTime();
+        // เคลื่อนที่แบบ Sine/Cosine ส่ายซ้ายขวา 50 ซม. ขึ้นลง 20 ซม. ความเร็วช้าๆ
+        const localOffset = new THREE.Vector3(
+          Math.sin(elapsedTime * 1.0) * 0.5,
+          Math.cos(elapsedTime * 1.3) * 0.2,
+          0
+        );
+        localOffset.applyQuaternion(hoopGroup.quaternion);
+        hoopGroup.position.copy(hoopBasePosition).add(localOffset);
       }
  
       if (!ballMesh) return;

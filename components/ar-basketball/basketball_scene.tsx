@@ -22,7 +22,15 @@ export default function BasketballScene() {
     assetLoadProgress: 0,
   });
   const [showStatus, setShowStatus] = useState<string | null>(null);
-
+  const [difficulty, setDifficulty] = useState<"easy" | "hard">("easy");
+ 
+  const toggleDifficulty = (mode: "easy" | "hard") => {
+    setDifficulty(mode);
+    if (typeof window !== "undefined" && (window as any).setDifficulty) {
+      (window as any).setDifficulty(mode);
+    }
+  };
+ 
   const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
 
   // เอฟเฟกต์แสดงข้อความสถานะ (เช่น Scored!, Missed!)
@@ -215,6 +223,31 @@ export default function BasketballScene() {
               <span className="text-slate-300">{gameState.ballsLeft}🏀</span>
             </div>
           </div>
+        </div>
+      )}
+      {/* ───────── ปุ่มปรับระดับความยาก Easy / Hard (มุมขวาบน) ───────── */}
+      {gameState.isHoopPlaced && (
+        <div className="absolute top-4 right-3 z-10 flex gap-1 rounded-xl bg-black/60 backdrop-blur-sm p-1 border border-white/10 font-mono text-[10px] font-bold">
+          <button
+            onClick={() => toggleDifficulty("easy")}
+            className={`px-3 py-1.5 rounded-lg transition active:scale-95 ${
+              difficulty === "easy"
+                ? "bg-purple-600 text-white shadow"
+                : "text-slate-400 hover:text-white"
+            }`}
+          >
+            EASY
+          </button>
+          <button
+            onClick={() => toggleDifficulty("hard")}
+            className={`px-3 py-1.5 rounded-lg transition active:scale-95 ${
+              difficulty === "hard"
+                ? "bg-purple-600 text-white shadow"
+                : "text-slate-400 hover:text-white"
+            }`}
+          >
+            HARD
+          </button>
         </div>
       )}
  
