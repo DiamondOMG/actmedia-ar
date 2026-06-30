@@ -84,8 +84,7 @@ export default function BasketballScene() {
 
   return (
     <div ref={containerRef} className="absolute inset-0 w-full h-full bg-black overflow-hidden">
-      {/* ปล่อยให้ XRExtras.FullWindowCanvas จัดการขนาด canvas เต็มจอให้เอง */}
-      <canvas id="camerafeed"></canvas>
+      <canvas id="camerafeed" className="absolute inset-0 w-full h-full object-cover"></canvas>
 
       {/* ───────── UI HUD (Heads-Up Display) ───────── */}
       <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-center p-4 bg-gradient-to-b from-black/60 to-transparent">
@@ -93,13 +92,6 @@ export default function BasketballScene() {
           <span className="text-xs text-purple-400 font-bold tracking-widest">AR PLATFORM PREVIEW</span>
           <span className="text-lg font-bold">🏀 Basketball Hoop Test Mode</span>
         </div>
-      </div>
-
-      {/* แนะนำวิธีการเล่นแบบกะทัดรัดด้านล่าง */}
-      <div className="absolute bottom-20 inset-x-0 z-10 flex justify-center pointer-events-none">
-        <p className="px-4 py-2 rounded-full bg-black/60 text-white text-xs font-semibold backdrop-blur border border-white/10 text-center">
-          ห่วงบาส 3D จะลอยอยู่ห่างออกไป 3 เมตรจากจุดเริ่มต้น
-        </p>
       </div>
 
       {/* ───────── ปุ่มควบคุมหลักด้านล่าง ───────── */}

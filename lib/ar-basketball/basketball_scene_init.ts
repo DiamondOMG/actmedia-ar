@@ -68,9 +68,9 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
       dirLight.position.set(3, 8, 4);
       scene.add(dirLight);
 
-      // 2. สร้างห่วงบาสลอยกลางอากาศ (ปรับความสูง Y ไปที่ 1.2 เมตร เพื่อให้อยู่ในระดับสายตาอย่างเหมาะสม)
+      // 2. สร้างห่วงบาสลอยกลางอากาศ (ปรับความสูง Y ไปที่ 1.6 เมตร เพื่อให้อยู่ในระดับสายตาและไม่จมอยู่ขอบล่าง/มุมล่างซ้าย)
       hoopGroup = createSimpleHoop();
-      hoopGroup.position.set(0, 1.2, hoopZ);
+      hoopGroup.position.set(0, 1.6, hoopZ);
       scene.add(hoopGroup);
 
       // ป้องกันการลากนิ้วเลื่อนหน้าเว็บ
