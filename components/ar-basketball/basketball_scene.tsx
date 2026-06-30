@@ -66,15 +66,19 @@ export default function BasketballScene() {
     startAR();
 
     return () => {
-      if (typeof XR8 !== "undefined" && xrStarted) {
-        XR8.stop();
-        XR8.clearCameraPipelineModules();
+      if (typeof XR8 !== "undefined") {
+        try {
+          XR8.stop();
+          XR8.clearCameraPipelineModules();
+        } catch (e) {
+          console.error(e);
+        }
       }
       if (window._cleanupBasketball) {
         window._cleanupBasketball();
       }
     };
-  }, [xrStarted]);
+  }, []);
 
   const handleReset = () => {
     // รีเซ็ตเกมง่ายๆ โดยรีโหลดหน้าเว็บเพื่อเคลียร์ state และกล้อง XR
