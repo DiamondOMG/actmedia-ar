@@ -179,23 +179,14 @@ export default function BasketballScene() {
 
       {/* ───────── UI HUD (Heads-Up Display) ไว้ฝั่งซ้ายบน ───────── */}
       {gameState.isHoopPlaced && (
-        <div className="absolute top-6 left-6 z-10 flex flex-col gap-2 font-mono pointer-events-none animate-in fade-in slide-in-from-left-4 duration-300">
-          {/* ข้อมูลรอบปัจจุบัน */}
-          <div className="rounded-2xl bg-slate-900/90 backdrop-blur border border-white/10 px-4 py-2 text-white w-28">
-            <div className="text-[10px] text-purple-400 font-bold tracking-wider mb-0.5">ROUND</div>
-            <div className="text-xl font-black leading-none">{gameState.currentRound || 1} <span className="text-xs font-normal text-slate-400">/ 3</span></div>
-          </div>
-          
-          {/* ข้อมูลคะแนน & สิทธิ์การโยน */}
-          <div className="rounded-2xl bg-slate-900/90 backdrop-blur border border-white/10 px-4 py-3 text-white flex flex-col gap-2 w-32">
-            <div>
-              <div className="text-[9px] text-slate-400 font-semibold tracking-wider">คะแนนรวม</div>
-              <div className="text-2xl font-black text-amber-400 leading-none">{gameState.score}</div>
-            </div>
-            <div className="h-px bg-white/10 w-full" />
-            <div>
-              <div className="text-[9px] text-slate-400 font-semibold tracking-wider">สิทธิ์การโยน</div>
-              <div className="text-lg font-bold text-purple-400 leading-none">{gameState.ballsLeft} <span className="text-[10px] font-normal text-slate-400">ครั้ง</span></div>
+        <div className="absolute top-4 left-3 z-10 pointer-events-none">
+          <div className="rounded-xl bg-black/60 backdrop-blur-sm border border-white/10 px-3 py-2 text-white font-mono text-xs flex flex-col gap-1">
+            <div className="flex items-center gap-1.5">
+              <span className="text-purple-400 font-bold text-[10px]">R{gameState.currentRound || 1}/3</span>
+              <span className="text-white/30">|</span>
+              <span className="text-amber-400 font-bold">{gameState.score}</span>
+              <span className="text-white/30">|</span>
+              <span className="text-slate-300">{gameState.ballsLeft}🏀</span>
             </div>
           </div>
         </div>

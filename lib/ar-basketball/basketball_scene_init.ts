@@ -162,7 +162,7 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
     ballMesh = createBasketballMesh();
     scene.add(ballMesh);
  
-    onStateChange({ status: 'aiming', ballsLeft, currentRound });
+    onStateChange({ status: 'idle', ballsLeft, currentRound });
   };
  
   // 6. ตรวจจับการชนแป้นบาส (Vertical Plane Backboard)
