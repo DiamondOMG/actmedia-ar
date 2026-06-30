@@ -96,14 +96,14 @@ export default function BasketballScene() {
         y: touch.clientY,
         time: Date.now(),
       };
-      // แสดงเส้นนำวิถีเริ่มต้นทันทีที่ระดับแรงขั้นต่ำสุด (dy = 0)
-      if (typeof window !== "undefined" && (window as any).updateTrajectoryGuide) {
-        (window as any).updateTrajectoryGuide(0);
+      // เปิดระบบเล็งและเรนเดอร์เส้นวิถี 60fps ทันที
+      if (typeof window !== "undefined" && (window as any).startAiming) {
+        (window as any).startAiming();
       }
     }
   };
 
-  // ตรวจจับการลากนิ้วเพื่ออัปเดตเส้นไกด์พรีวิววิถีโค้ง
+  // ตรวจจับการลากนิ้วเพื่ออัปเดตระยะลากของการเล็ง
   const handleTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
     if (!touchStartRef.current || gameState.status !== "idle" || !gameState.isHoopPlaced) return;
 
@@ -112,8 +112,8 @@ export default function BasketballScene() {
       const rawDy = touchStartRef.current.y - touch.clientY; // ลากขึ้น dy จะเป็นบวก
       const dy = Math.max(rawDy, 0); // ไม่ให้แรงต่ำกว่า 0
 
-      if (typeof window !== "undefined" && (window as any).updateTrajectoryGuide) {
-        (window as any).updateTrajectoryGuide(dy);
+      if (typeof window !== "undefined" && (window as any).updateAimingDy) {
+        (window as any).updateAimingDy(dy);
       }
     }
   };
@@ -128,9 +128,9 @@ export default function BasketballScene() {
 
     touchStartRef.current = null;
 
-    // ซ่อนเส้นนำทางวิถีทันทีเมื่อปล่อยนิ้ว
-    if (typeof window !== "undefined" && (window as any).hideTrajectoryGuide) {
-      (window as any).hideTrajectoryGuide();
+    // สั่งปิดระบบเล็งและซ่อนเส้นวิถี
+    if (typeof window !== "undefined" && (window as any).stopAiming) {
+      (window as any).stopAiming();
     }
 
     if (typeof window !== "undefined" && (window as any).throwBasketball && (window as any).getShootVelocity) {

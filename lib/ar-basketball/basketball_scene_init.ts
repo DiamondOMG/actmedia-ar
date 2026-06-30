@@ -26,6 +26,10 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
   let hasScoredThisThrow = false;
   let canScore = false; // ตรวจสอบว่าผ่านห่วงจากบนลงล่างเท่านั้น
  
+  // เพิ่มเติม: ตัวแปรสำหรับการเล็งในลูป update
+  let isAiming = false;
+  let currentDy = 0;
+ 
   const ballRadius = 0.12;
   const ringRadius = 0.28;
   const gravity = 9.81;
@@ -277,7 +281,8 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
       });
  
       const handleTouch = (e: TouchEvent) => {
-        if (e.touches.length === 1 && !isBallThrown && isHoopPlaced) {
+        // เรียก recenter เฉพาะตอนที่ยังไม่มีแป้นบาสสปอว์นขึ้นมาเท่านั้น
+        if (e.touches.length === 1 && !isBallThrown && !isHoopPlaced) {
           XR8.XrController.recenter();
         }
       };
@@ -291,58 +296,20 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
         onStateChange({ status: 'thrown' });
       };
  
-      // เพิ่มฟังก์ชันวาด/แสดงวิถีโค้งพาราโบลาจาก React
-      (window as any).updateTrajectoryGuide = (dy: number) => {
-        if (!ballMesh || isBallThrown || !trajectoryLine || !isHoopPlaced) return;
- 
-        const { camera: activeCamera } = XR8.Threejs.xrScene();
-        if (!activeCamera) return;
- 
-        const worldVelocity = getVelocityFromDy(dy, activeCamera);
-        const positions = trajectoryLine.geometry.attributes.position.array as Float32Array;
-        const maxPoints = 30;
-        const simDt = 0.05; // คำนวณทีละ 50ms
- 
-        const tempPos = new THREE.Vector3().copy(ballMesh.position);
-        const tempVel = new THREE.Vector3().copy(worldVelocity);
-        let actualPointsCount = 0;
- 
-        for (let i = 0; i < maxPoints; i++) {
-          positions[i * 3] = tempPos.x;
-          positions[i * 3 + 1] = tempPos.y;
-          positions[i * 3 + 2] = tempPos.z;
-          actualPointsCount++;
- 
-          // อัปเดตสมการฟิสิกส์จำลอง
-          tempVel.y -= gravity * simDt;
-          tempPos.addScaledVector(tempVel, simDt);
- 
-          // จุดวิถีสิ้นสุดลงที่จุดสูงสุดของวิถีโค้ง (Apex) เมื่อความเร็วแกน Y สลับเป็นขาลง
-          if (tempVel.y < 0) {
-            break;
-          }
-        }
- 
-        // เติมพิกัดจุดที่เหลือในบัฟเฟอร์การแสดงผลด้วยจุดพิกัดสูงสุดที่คำนวณได้ เพื่อความเสถียรของ WebGL
-        const lastIndex = actualPointsCount - 1;
-        const lastX = positions[lastIndex * 3];
-        const lastY = positions[lastIndex * 3 + 1];
-        const lastZ = positions[lastIndex * 3 + 2];
-        for (let i = actualPointsCount; i < maxPoints; i++) {
-          positions[i * 3] = lastX;
-          positions[i * 3 + 1] = lastY;
-          positions[i * 3 + 2] = lastZ;
-        }
- 
-        trajectoryLine.geometry.attributes.position.needsUpdate = true;
-        
-        // สั่งวาดเส้นเฉพาะช่วงขาขึ้นจนถึงจุด Apex เท่านั้น
-        trajectoryLine.geometry.setDrawRange(0, actualPointsCount);
-        trajectoryLine.visible = true;
+      // เพิ่มฟังก์ชันสำหรับ React สั่งเปิดระบบเล็ง
+      (window as any).startAiming = () => {
+        isAiming = true;
+        currentDy = 0;
       };
  
-      // เพิ่มฟังก์ชันซ่อนวิถีโค้ง
-      (window as any).hideTrajectoryGuide = () => {
+      // อัปเดตระยะลากนิ้วระหว่างเล็ง
+      (window as any).updateAimingDy = (dy: number) => {
+        currentDy = dy;
+      };
+ 
+      // สั่งปิดระบบเล็งและซ่อนเส้นไกด์
+      (window as any).stopAiming = () => {
+        isAiming = false;
         if (trajectoryLine) {
           trajectoryLine.visible = false;
         }
@@ -378,8 +345,9 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
         if (trajectoryLine) scene.remove(trajectoryLine);
         canvas.removeEventListener('touchstart', handleTouch, true);
         delete (window as any).throwBasketball;
-        delete (window as any).updateTrajectoryGuide;
-        delete (window as any).hideTrajectoryGuide;
+        delete (window as any).startAiming;
+        delete (window as any).updateAimingDy;
+        delete (window as any).stopAiming;
         delete (window as any).getShootVelocity;
       };
     },
@@ -467,6 +435,46 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
         const offset = new THREE.Vector3(0, -0.15, -0.4);
         offset.applyQuaternion(camera.quaternion);
         ballMesh.position.copy(camera.position).add(offset);
+ 
+        // อัปเดตและเรนเดอร์เส้นไกด์วิถีโค้งที่ 60fps ในลูปหลัก เพื่อให้หันตามมุมกล้องเรียลไทม์
+        if (isAiming && trajectoryLine) {
+          const worldVelocity = getVelocityFromDy(currentDy, camera);
+          const positions = trajectoryLine.geometry.attributes.position.array as Float32Array;
+          const maxPoints = 30;
+          const simDt = 0.05;
+ 
+          const tempPos = new THREE.Vector3().copy(ballMesh.position);
+          const tempVel = new THREE.Vector3().copy(worldVelocity);
+          let actualPointsCount = 0;
+ 
+          for (let i = 0; i < maxPoints; i++) {
+            positions[i * 3] = tempPos.x;
+            positions[i * 3 + 1] = tempPos.y;
+            positions[i * 3 + 2] = tempPos.z;
+            actualPointsCount++;
+ 
+            tempVel.y -= gravity * simDt;
+            tempPos.addScaledVector(tempVel, simDt);
+ 
+            if (tempVel.y < 0) {
+              break;
+            }
+          }
+ 
+          const lastIndex = actualPointsCount - 1;
+          const lastX = positions[lastIndex * 3];
+          const lastY = positions[lastIndex * 3 + 1];
+          const lastZ = positions[lastIndex * 3 + 2];
+          for (let i = actualPointsCount; i < maxPoints; i++) {
+            positions[i * 3] = lastX;
+            positions[i * 3 + 1] = lastY;
+            positions[i * 3 + 2] = lastZ;
+          }
+ 
+          trajectoryLine.geometry.attributes.position.needsUpdate = true;
+          trajectoryLine.geometry.setDrawRange(0, actualPointsCount);
+          trajectoryLine.visible = true;
+        }
       }
     }
   };
