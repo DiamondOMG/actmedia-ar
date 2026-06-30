@@ -177,23 +177,30 @@ export default function BasketballScene() {
         </div>
       )}
 
-      {/* ───────── UI HUD (Heads-Up Display) ───────── */}
+      {/* ───────── UI HUD (Heads-Up Display) ไว้ฝั่งซ้ายบน ───────── */}
       {gameState.isHoopPlaced && (
-        <div className="absolute inset-x-0 top-0 z-10 flex flex-col items-center gap-2 p-4 bg-gradient-to-b from-black/60 to-transparent">
-          <div className="flex flex-col items-center rounded-xl bg-slate-900/80 backdrop-blur border border-white/10 px-4 py-2 text-white">
-            <span className="text-xs text-purple-400 font-bold tracking-widest">AR PLATFORM PREVIEW</span>
-            <span className="text-lg font-bold">🏀 Basketball Hoop Test Mode</span>
+        <div className="absolute top-6 left-6 z-10 flex flex-col gap-2 font-mono pointer-events-none animate-in fade-in slide-in-from-left-4 duration-300">
+          {/* ข้อมูลรอบปัจจุบัน */}
+          <div className="rounded-2xl bg-slate-900/90 backdrop-blur border border-white/10 px-4 py-2 text-white w-28">
+            <div className="text-[10px] text-purple-400 font-bold tracking-wider mb-0.5">ROUND</div>
+            <div className="text-xl font-black leading-none">{gameState.currentRound || 1} <span className="text-xs font-normal text-slate-400">/ 3</span></div>
           </div>
-
-          {/* บอร์ดแสดงสถิติคะแนน */}
-          <div className="flex items-center gap-4 rounded-lg bg-slate-900/90 backdrop-blur border border-white/10 px-4 py-1.5 text-sm text-white font-mono">
-            <div>คะแนน: <span className="text-amber-400 font-bold text-base">{gameState.score}</span></div>
-            <div className="h-3 w-px bg-white/20" />
-            <div>เหลือ: <span className="text-purple-400 font-bold text-base">{gameState.ballsLeft}</span> ลูก</div>
+          
+          {/* ข้อมูลคะแนน & สิทธิ์การโยน */}
+          <div className="rounded-2xl bg-slate-900/90 backdrop-blur border border-white/10 px-4 py-3 text-white flex flex-col gap-2 w-32">
+            <div>
+              <div className="text-[9px] text-slate-400 font-semibold tracking-wider">คะแนนรวม</div>
+              <div className="text-2xl font-black text-amber-400 leading-none">{gameState.score}</div>
+            </div>
+            <div className="h-px bg-white/10 w-full" />
+            <div>
+              <div className="text-[9px] text-slate-400 font-semibold tracking-wider">สิทธิ์การโยน</div>
+              <div className="text-lg font-bold text-purple-400 leading-none">{gameState.ballsLeft} <span className="text-[10px] font-normal text-slate-400">ครั้ง</span></div>
+            </div>
           </div>
         </div>
       )}
-
+ 
       {/* ข้อความแสดงสถานะชู้ตจังหวะ scored / missed */}
       {showStatus && (
         <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
@@ -202,19 +209,26 @@ export default function BasketballScene() {
           </div>
         </div>
       )}
-
-      {/* บอร์ดสรุปคะแนนหลังเล่นจบ 10 ลูก */}
-      {gameState.ballsLeft === 0 && gameState.status === "idle" && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm px-6">
-          <div className="bg-slate-900 border border-white/10 rounded-3xl p-6 max-w-sm w-full text-center text-white shadow-2xl animate-in zoom-in-95">
-            <h2 className="text-2xl font-bold mb-2">🎉 จบเกมทดสอบ</h2>
-            <p className="text-slate-400 text-sm mb-4">คุณทำคะแนนได้ทั้งหมด</p>
-            <div className="text-5xl font-black text-amber-400 mb-6">{gameState.score} คะแนน</div>
+ 
+      {/* บอร์ดสรุปคะแนนหลังเล่นจบครบ 3 รอบ */}
+      {gameState.ballsLeft === 0 && gameState.currentRound === 3 && gameState.status === "idle" && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md px-6">
+          <div className="bg-slate-900 border border-white/10 rounded-3xl p-7 max-w-sm w-full text-center text-white shadow-2xl animate-in zoom-in-95 duration-200">
+            <span className="text-4xl mb-2 block">🏆</span>
+            <h2 className="text-2xl font-bold mb-1">จบการแข่งขัน 3 รอบ</h2>
+            <p className="text-slate-400 text-xs mb-5">สรุปคะแนนการทดสอบชู้ตบาสเก็ตบอล AR</p>
+            
+            <div className="bg-white/5 rounded-2xl p-4 border border-white/5 mb-6">
+              <div className="text-sm text-slate-400 mb-1">คะแนนรวมสุทธิ</div>
+              <div className="text-5xl font-black text-amber-400 font-mono leading-none mb-1">{gameState.score}</div>
+              <div className="text-[10px] text-slate-500">ยิงสำเร็จจากโอกาสทั้งหมด 9 ครั้ง</div>
+            </div>
+            
             <button
               onClick={handleReset}
-              className="w-full py-3.5 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-2xl transition active:scale-95"
+              className="w-full py-3.5 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-2xl transition active:scale-95 shadow-lg shadow-purple-600/30"
             >
-              เล่นอีกครั้ง
+              เริ่มท้าทายใหม่
             </button>
           </div>
         </div>

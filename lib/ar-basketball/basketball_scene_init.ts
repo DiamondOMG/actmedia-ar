@@ -8,6 +8,7 @@ export interface GameState {
   status: 'idle' | 'aiming' | 'thrown' | 'scored' | 'missed';
   isHoopPlaced?: boolean;
   isDeviceAligned?: boolean;
+  currentRound?: number;
 }
  
 export const initBasketballScenePipelineModule = (onStateChange: (state: Partial<GameState>) => void) => {
@@ -21,19 +22,22 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
   const ballVelocity = new THREE.Vector3();
   let isBallThrown = false;
   let isHoopPlaced = false;
-  let ballsLeft = 10;
-  let score = 0;
+ 
+  // ระบบทัวร์นาเมนต์ 3 รอบ
+  let currentRound = 1;
+  let score = 0;       // คะแนนสะสมทั้งหมด
+  let ballsLeft = 3;   // โอกาสโยนในรอบปัจจุบัน
+ 
   let hasScoredThisThrow = false;
   let canScore = false; // ตรวจสอบว่าผ่านห่วงจากบนลงล่างเท่านั้น
  
-  // เพิ่มเติม: ตัวแปรสำหรับการเล็งในลูป update
+  // ตัวแปรสำหรับการเล็งในลูป update
   let isAiming = false;
   let currentDy = 0;
  
-  const ballRadius = 0.12;
+  const ballRadius = 0.06; // ย่อขนาดลง 2 เท่า (เดิม 0.12)
   const ringRadius = 0.28;
   const gravity = 9.81;
-  const hoopZ = -3.0; // วางห่างออกไป 3 เมตร
  
   // 1. วาดแป้นและห่วงบาสเกตบอลแบบง่ายๆ
   const createSimpleHoop = (): THREE.Group => {
@@ -103,11 +107,46 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
     return line;
   };
  
-  // 4. รีเซ็ตลูกบอลลูกใหม่
+  // 4. สปอว์นแป้นบาสในแต่ละรอบ (สุ่ม X, Y และสลับระยะลึก Z แบบฟิก)
+  const spawnHoopForRound = (round: number) => {
+    if (typeof XR8 === 'undefined') return;
+    const { camera } = XR8.Threejs.xrScene();
+    if (!camera) return;
+ 
+    // ระยะลึก Z คงที่ในแต่ละรอบ (รอบ 1: -2.5m, รอบ 2: -3.8m, รอบ 3: -5.0m)
+    const roundZs = [-2.5, -3.8, -5.0];
+    const hoopZ = roundZs[round - 1] || -3.0;
+ 
+    // สุ่มตำแหน่ง X (แนวขวาง) และ Y (ความสูงระดับสายตา)
+    const randomX = (Math.random() - 0.5) * 1.4; // สุ่มระหว่าง -0.7 ถึง 0.7 เมตร
+    const randomY = 1.4 + Math.random() * 0.4;   // สุ่มระหว่าง 1.4 ถึง 1.8 เมตร
+ 
+    // คำนวณพิกัดโลกจากทิศหน้ากล้อง
+    const localPos = new THREE.Vector3(randomX, 0, hoopZ);
+    localPos.applyQuaternion(camera.quaternion);
+    hoopGroup.position.copy(camera.position).add(localPos);
+    hoopGroup.position.y = randomY;
+ 
+    // หันหน้าแป้นเข้าหาตำแหน่งกล้องแนวระนาบ
+    const camLookPos = new THREE.Vector3(camera.position.x, hoopGroup.position.y, camera.position.z);
+    hoopGroup.lookAt(camLookPos);
+ 
+    if (scene && !scene.children.includes(hoopGroup)) {
+      scene.add(hoopGroup);
+    }
+ 
+    isHoopPlaced = true;
+    onStateChange({
+      isHoopPlaced: true,
+      currentRound: round,
+      ballsLeft
+    });
+  };
+ 
+  // 5. รีเซ็ตลูกบอลลูกใหม่
   const resetBall = () => {
     if (!isHoopPlaced) return;
-    if (ballsLeft <= 0) {
-      onStateChange({ status: 'idle', ballsLeft: 0 });
+    if (ballsLeft <= 0 && currentRound >= 3) {
       return;
     }
  
@@ -123,10 +162,10 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
     ballMesh = createBasketballMesh();
     scene.add(ballMesh);
  
-    onStateChange({ status: 'idle', ballsLeft });
+    onStateChange({ status: 'aiming', ballsLeft, currentRound });
   };
  
-  // 5. ตรวจจับการชนแป้นบาส (Vertical Plane Backboard)
+  // 6. ตรวจจับการชนแป้นบาส (Vertical Plane Backboard)
   const checkBackboardCollision = () => {
     if (!ballMesh) return;
  
@@ -138,45 +177,35 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
     const halfHeight = 0.4;
     const thickness = 0.03;
  
-    // แปลงตำแหน่งบาสเข้าสู่ระบบพิกัด Local ของ HoopGroup เพื่อเช็คชนแป้นที่หมุนแล้วได้อย่างถูกต้อง
     const localBallPos = ballMesh.position.clone().sub(hoopGroup.position);
     localBallPos.applyQuaternion(hoopGroup.quaternion.clone().invert());
  
-    // พิกัดแป้นบาสหลังหมุนจะขนานกับแกน X และ Y ในพิกัด Local เสมอ
     const withinX = localBallPos.x >= -halfWidth && localBallPos.x <= halfWidth;
     const withinY = localBallPos.y >= 0.4 - halfHeight && localBallPos.y <= 0.4 + halfHeight;
  
     if (withinX && withinY) {
-      // หน้าแป้นบาสจะหันไปทิศ +Z ในพิกัด Local ของกลุ่ม (เนื่องจากเรา lookAt และหมุน 180)
       const collisionLocalZ = thickness / 2 + ballRadius;
-      
-      // เมื่อแกน Z ของบาสต่ำกว่าระยะหน้าแป้น และความเร็วพุ่งเข้าหาแป้น (Local Velocity Z < 0)
       const localVelocity = ballVelocity.clone().applyQuaternion(hoopGroup.quaternion.clone().invert());
  
       if (localBallPos.z <= collisionLocalZ && localBallPos.z >= -thickness && localVelocity.z < 0) {
         localBallPos.z = collisionLocalZ;
-        localVelocity.z = -localVelocity.z * 0.55; // สะท้อนและดูดซับแรงกระแทก
+        localVelocity.z = -localVelocity.z * 0.55;
         localVelocity.x *= 0.8;
  
-        // แปลงความเร็วและตำแหน่งกลับเข้าสู่พิกัดโลก
         ballMesh.position.copy(localBallPos).applyQuaternion(hoopGroup.quaternion).add(hoopGroup.position);
         ballVelocity.copy(localVelocity).applyQuaternion(hoopGroup.quaternion);
       }
     }
   };
  
-  // 6. ตรวจจับการชนขอบห่วงแบบวงแหวน (Invisible Ring Hitbox - Torus Collision)
+  // 7. ตรวจจับการชนขอบห่วงแบบวงแหวน (Invisible Ring Hitbox - Torus Collision)
   const checkRingCollision = () => {
     if (!ballMesh) return;
  
-    // พิกัดโลกของห่วงบาสที่ผ่านการหมุนแล้ว
     const ringLocalOffset = new THREE.Vector3(0, 0.1, 0.35);
     const ringCenter = ringLocalOffset.clone().applyQuaternion(hoopGroup.quaternion).add(hoopGroup.position);
  
     const ballPos = ballMesh.position;
- 
-    // หาระยะห่างทางราบ (ระนาบแบนของห่วงบาสที่หมุนตามแป้น)
-    // สำหรับแป้นบาสที่หมุนแนว Y ระยะห่าง XZ สะท้อนถึงระยะราบในระบบพิกัดโลกได้
     const dx = ballPos.x - ringCenter.x;
     const dz = ballPos.z - ringCenter.z;
     const distXZ = Math.sqrt(dx * dx + dz * dz);
@@ -187,7 +216,6 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
  
       const closestX = ringCenter.x + dirX * ringRadius;
       const closestZ = ringCenter.z + dirZ * ringRadius;
-      // ความสูงของห่วงตามความสูงจริงของกลุ่มห่วงบาส
       const closestPointOnRing = new THREE.Vector3(closestX, ringCenter.y, closestZ);
  
       const distance3D = ballPos.distanceTo(closestPointOnRing);
@@ -195,18 +223,17 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
  
       if (distance3D < collisionThreshold) {
         const normal = new THREE.Vector3().subVectors(ballPos, closestPointOnRing).normalize();
-        // แก้ไขไม่ให้วัตถุทะลุเข้าไปในโมเดล (Anti-penetration)
         ballMesh.position.copy(closestPointOnRing).addScaledVector(normal, collisionThreshold);
  
         const dot = ballVelocity.dot(normal);
         if (dot < 0) {
-          ballVelocity.addScaledVector(normal, -(1 + 0.5) * dot); // เด้งสะท้อนด้วย bounciness 0.5
+          ballVelocity.addScaledVector(normal, -(1 + 0.5) * dot);
         }
       }
     }
   };
  
-  // 7. ตรวจจับการชู้ตทำคะแนน
+  // 8. ตรวจจับการชู้ตทำคะแนน
   const checkScore = () => {
     if (!ballMesh || hasScoredThisThrow) return;
  
@@ -218,12 +245,10 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
     const dz = ballPos.z - ringCenter.z;
     const distXZ = Math.sqrt(dx * dx + dz * dz);
  
-    // เริ่มเปิดสิทธิ์ทำคะแนนเมื่อลูกบาสลอยอยู่เหนือระนาบห่วงและตรงช่องห่วง
     if (distXZ < ringRadius && ballPos.y > ringCenter.y) {
       canScore = true;
     }
  
-    // ทำคะแนนเมื่อเคลื่อนที่ลอดผ่านระนาบจากบนลงล่างสำเร็จ
     if (canScore && ballPos.y <= ringCenter.y && distXZ < ringRadius && ballVelocity.y < 0) {
       hasScoredThisThrow = true;
       canScore = false;
@@ -234,18 +259,16 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
  
   // ฟังก์ชันคำนวณเวกเตอร์ความเร็วจากระยะการลากแกน Y
   const getVelocityFromDy = (dy: number, camera: any): THREE.Vector3 => {
-    const maxDy = window.innerHeight * 0.5; // จำกัดขอบเขตลากสูงสุดที่ครึ่งจอภาพ
-    const ratio = Math.min(Math.max(dy / maxDy, 0.1), 1.0);
+    const maxDy = window.innerHeight * 0.5;
+    const cleanDy = Math.max(dy, 0);
+    const ratio = Math.min(cleanDy / maxDy, 1.0);
  
-    // แกน X เป็น 0 เสมอตามการตัดสินใจของผู้ใช้ (เล็งด้วยการหมุนส่องกล้องแทน)
     const tX = 0;
-    // แกน Y (ความสูงวิถีย้อย): ยืดหยุ่นตามระยะลาก (4.0 ถึง 8.5)
+    // ปรับน้ำหนักและแรงส่งตามความเหมาะสมของขนาดลูกบอลและระยะ Z ที่ลึกขึ้น
     const tY = 4.0 + ratio * 4.5;
-    // แกน Z (แรงส่งแนวลึก): ยืดหยุ่นตามระยะลาก (-4.5 ถึง -9.0)
     const tZ = -4.5 - ratio * 4.5;
  
     const localVelocity = new THREE.Vector3(tX, tY, tZ);
-    // แปลงความเร็วตามพิกัดทิศของกล้องจริงในโลก 3D
     return localVelocity.applyQuaternion(camera.quaternion);
   };
  
@@ -326,14 +349,16 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
       };
  
       // เริ่มต้นสถานะเกม (ยังไม่เสกห่วงบาส รอปรับระนาบมือถือ)
-      ballsLeft = 10;
+      ballsLeft = 3;
+      currentRound = 1;
       score = 0;
       isHoopPlaced = false;
       clock.getDelta();
  
       onStateChange({
         score: 0,
-        ballsLeft: 10,
+        ballsLeft: 3,
+        currentRound: 1,
         status: 'idle',
         isHoopPlaced: false,
         isDeviceAligned: false,
@@ -361,7 +386,6 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
       // 1. ตรวจสอบการปรับระนาบมือถือก่อนเสกแป้นบาส
       if (!isHoopPlaced) {
         const euler = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
-        // ตรวจเช็คว่าเครื่องตั้งฉากกับโลกขนานแนวดิ่ง (Pitch เอียงก้มเงยอยู่ในช่วง ±0.15 เรเดียน หรือประมาณ ±8.5 องศา)
         const isAligned = Math.abs(euler.x) < 0.15;
  
         onStateChange({
@@ -370,22 +394,7 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
         });
  
         if (isAligned) {
-          // เสกแป้นบาสตรงหน้ากล้องระยะ 3 เมตร
-          const hoopPos = new THREE.Vector3(0, 0, hoopZ);
-          hoopPos.applyQuaternion(camera.quaternion);
-          hoopGroup.position.copy(camera.position).add(hoopPos);
- 
-          // บังคับความสูง Y ให้สปอว์นที่ระดับระดับสายตา 1.6 เมตรของโลก
-          hoopGroup.position.y = 1.6;
- 
-          // หมุนหันหน้าของแป้นบาสเข้าหาตำแหน่งกล้อง (แนวระนาบ XZ)
-          const camLookPos = new THREE.Vector3(camera.position.x, hoopGroup.position.y, camera.position.z);
-          hoopGroup.lookAt(camLookPos);
- 
-          scene.add(hoopGroup);
-          isHoopPlaced = true;
- 
-          onStateChange({ isHoopPlaced: true });
+          spawnHoopForRound(1); // เสกแป้นบาสสำหรับรอบที่ 1
           resetBall();
         }
         return;
@@ -403,7 +412,7 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
         checkRingCollision();
         checkScore();
  
-        // เช็คการตกพื้นดิน (Y < 0.12)
+        // เช็คการตกพื้นดิน (Y < 0.06)
         if (ballMesh.position.y < ballRadius && ballVelocity.y < 0) {
           if (Math.abs(ballVelocity.y) > 1.2) {
             ballMesh.position.y = ballRadius;
@@ -416,19 +425,49 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
               onStateChange({ status: 'missed' });
             }
             isBallThrown = false;
+            
             ballsLeft -= 1;
-            setTimeout(resetBall, 1200);
+            
+            setTimeout(() => {
+              if (ballsLeft <= 0) {
+                if (currentRound < 3) {
+                  currentRound += 1;
+                  ballsLeft = 3;
+                  spawnHoopForRound(currentRound);
+                  resetBall();
+                } else {
+                  // สิ้นสุด 3 รอบ เล่นจบแล้ว!
+                  ballsLeft = 0;
+                  onStateChange({ status: 'idle', ballsLeft: 0, currentRound: 3 });
+                }
+              } else {
+                resetBall();
+              }
+            }, 1200);
           }
         }
  
-        // หลุดขอบเขตออกไปไกลเกินไป
-        if (ballMesh.position.y < -3.0 || ballMesh.position.z < -10.0 || ballMesh.position.z > 5.0) {
+        // หลุดขอบเขตออกไปไกลเกินไป (รอบ 3 อยู่ Z = -5.0 เมตร ให้ Z หลุดขอบเขตไกลขึ้น)
+        if (ballMesh.position.y < -3.0 || ballMesh.position.z < -12.0 || ballMesh.position.z > 5.0) {
           if (!hasScoredThisThrow) {
             onStateChange({ status: 'missed' });
           }
           isBallThrown = false;
           ballsLeft -= 1;
-          resetBall();
+          
+          if (ballsLeft <= 0) {
+            if (currentRound < 3) {
+              currentRound += 1;
+              ballsLeft = 3;
+              spawnHoopForRound(currentRound);
+              resetBall();
+            } else {
+              ballsLeft = 0;
+              onStateChange({ status: 'idle', ballsLeft: 0, currentRound: 3 });
+            }
+          } else {
+            resetBall();
+          }
         }
       } else {
         // ซิงก์ตำแหน่งลูกบอลให้อยู่ติดกับกล้อง (เสมือนผู้ใช้ถือไว้เพื่อพร้อมปัดชู้ต)
