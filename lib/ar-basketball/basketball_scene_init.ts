@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
  
 declare const XR8: any;
  
@@ -18,7 +19,8 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
   const clock = new THREE.Clock();
  
   // ตัวแปรด้านการควบคุมฟิสิกส์และสถานะเกม
-  let ballMesh: THREE.Mesh | null = null;
+  let ballMesh: THREE.Object3D | null = null;
+  let ballModelTemplate: THREE.Object3D | null = null; // preloaded GLB
   const ballVelocity = new THREE.Vector3();
   let isBallThrown = false;
   let isHoopPlaced = false;
@@ -35,7 +37,8 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
   let isAiming = false;
   let currentDy = 0;
  
-  const ballRadius = 0.06; // ย่อขนาดลง 2 เท่า (เดิม 0.12)
+  const ballRadius = 0.06; // hitbox radius (เมตร)
+  const ballModelScale = 0.062; // 0.06 / 0.97 (model radius)
   const ringRadius = 0.28;
   const gravity = 9.81;
  
@@ -75,14 +78,17 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
     return hoop;
   };
  
-  // 2. สร้าง Mesh ลูกบาสเกตบอล 3D
-  const createBasketballMesh = (): THREE.Mesh => {
+  // 2. สร้าง Object3D ลูกบาสเกตบอล (clone จาก GLB หรือ fallback เป็น sphere)
+  const createBasketballMesh = (): THREE.Object3D => {
+    if (ballModelTemplate) {
+      const clone = ballModelTemplate.clone();
+      clone.scale.setScalar(ballModelScale);
+      clone.traverse((child: any) => { if (child.isMesh) child.castShadow = true; });
+      return clone;
+    }
+    // fallback กรณีโมเดลยังโหลดไม่เสร็จ
     const geo = new THREE.SphereGeometry(ballRadius, 24, 24);
-    const mat = new THREE.MeshStandardMaterial({
-      color: 0xff5500,
-      roughness: 0.7,
-      metalness: 0.1,
-    });
+    const mat = new THREE.MeshStandardMaterial({ color: 0xff5500, roughness: 0.7, metalness: 0.1 });
     const ball = new THREE.Mesh(geo, mat);
     ball.castShadow = true;
     return ball;
@@ -290,6 +296,11 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
  
       // โหลดโครงสร้างแป้นบาสเก็ตบอล (รอสปอว์น)
       hoopGroup = createSimpleHoop();
+ 
+      // โหลดโมเดล GLB ลูกบาสเก็ตบอลล่วงหน้า
+      new GLTFLoader().load('/3d/throwing/basketball.glb', (gltf) => {
+        ballModelTemplate = gltf.scene;
+      });
  
       // โหลดโครงสร้างเส้นประวิถีโค้ง
       trajectoryLine = createTrajectoryLine();
