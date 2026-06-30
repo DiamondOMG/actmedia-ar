@@ -195,7 +195,8 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
       const collisionLocalZ = thickness / 2 + ballRadius;
       const localVelocity = ballVelocity.clone().applyQuaternion(hoopGroup.quaternion.clone().invert());
  
-      if (localBallPos.z <= collisionLocalZ && localBallPos.z >= -thickness && localVelocity.z < 0) {
+      // ป้องกันการชนทะลุแผ่นปะทะ (Tunneling): ขยายขีดจำกัดด้านหลังแป้นเป็น -0.5 เมตร สำหรับรอบที่ 2 และ 3 ที่ยิงแรง
+      if (localBallPos.z <= collisionLocalZ && localBallPos.z >= -0.5 && localVelocity.z < 0) {
         localBallPos.z = collisionLocalZ;
         localVelocity.z = -localVelocity.z * 0.55;
         localVelocity.x *= 0.8;
@@ -227,7 +228,8 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
       const closestPointOnRing = new THREE.Vector3(closestX, ringCenter.y, closestZ);
  
       const distance3D = ballPos.distanceTo(closestPointOnRing);
-      const collisionThreshold = ballRadius + 0.015; // รัศมีลูกบาส + ความหนาเหล็กห่วง
+      // ขยายขอบเขตการเช็คชนขอบห่วงเป็น 0.035 เมตร เพื่อรองรับความเร็วและความเล็กของลูกบาสใหม่ไม่ให้ทะลุขอบห่วงในรอบไกลๆ
+      const collisionThreshold = ballRadius + 0.035; 
  
       if (distance3D < collisionThreshold) {
         const normal = new THREE.Vector3().subVectors(ballPos, closestPointOnRing).normalize();
@@ -272,9 +274,9 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
     const ratio = Math.min(cleanDy / maxDy, 1.0);
  
     const tX = 0;
-    // ปรับน้ำหนักและแรงส่งตามความเหมาะสมของขนาดลูกบอลและระยะ Z ที่ลึกขึ้น
-    const tY = 4.0 + ratio * 4.5;
-    const tZ = -4.5 - ratio * 4.5;
+    // ปรับสเกลแรงยิงให้เริ่มต้นจากน้อยมากๆ (เมื่อแค่แตะ ratio = 0) และขยายขึ้นตามสัดส่วนการลาก
+    const tY = 1.0 + ratio * 7.5;   // ช่วง 1.0 ถึง 8.5 m/s
+    const tZ = -1.0 - ratio * 8.0;  // ช่วง -1.0 ถึง -9.0 m/s
  
     const localVelocity = new THREE.Vector3(tX, tY, tZ);
     return localVelocity.applyQuaternion(camera.quaternion);
@@ -504,6 +506,10 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
         const offset = new THREE.Vector3(0, -0.15, -0.4);
         offset.applyQuaternion(camera.quaternion);
         ballMesh.position.copy(camera.position).add(offset);
+ 
+        // หมุนลูกบอลช้าๆ ขณะรอการชู้ตเพื่อความสมจริง
+        ballMesh.rotateY(1.0 * dt);
+        ballMesh.rotateX(0.5 * dt);
  
         // อัปเดตและเรนเดอร์เส้นไกด์วิถีโค้งที่ 60fps ในลูปหลัก เพื่อให้หันตามมุมกล้องเรียลไทม์
         if (isAiming && trajectoryLine) {
