@@ -89,7 +89,7 @@ export default function BasketballScene() {
 
   // ตรวจจับการเริ่มสัมผัสหน้าจอ
   const handleTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
-    if (e.touches.length === 1 && gameState.status === "idle") {
+    if (e.touches.length === 1 && gameState.status === "idle" && gameState.isHoopPlaced) {
       const touch = e.touches[0];
       touchStartRef.current = {
         x: touch.clientX,
@@ -99,41 +99,42 @@ export default function BasketballScene() {
     }
   };
 
-  // ตรวจจับการปล่อยนิ้วและคำนวณการปัดชู้ต
+  // ตรวจจับการลากนิ้วเพื่ออัปเดตเส้นไกด์พรีวิววิถีโค้ง
+  const handleTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (!touchStartRef.current || gameState.status !== "idle" || !gameState.isHoopPlaced) return;
+
+    if (e.touches.length === 1) {
+      const touch = e.touches[0];
+      const dy = touchStartRef.current.y - touch.clientY; // ลากขึ้น dy จะเป็นบวก
+
+      if (dy > 10) {
+        if (typeof window !== "undefined" && (window as any).updateTrajectoryGuide) {
+          (window as any).updateTrajectoryGuide(dy);
+        }
+      }
+    }
+  };
+
+  // ตรวจจับการปล่อยนิ้วและโยนลูกบาสตามระยะทาง Y
   const handleTouchEnd = (e: React.TouchEvent<HTMLCanvasElement>) => {
-    if (!touchStartRef.current || gameState.status !== "idle") return;
+    if (!touchStartRef.current || gameState.status !== "idle" || !gameState.isHoopPlaced) return;
 
     const touch = e.changedTouches[0];
-    const dx = touch.clientX - touchStartRef.current.x;
-    const dy = touch.clientY - touchStartRef.current.y;
-    const dt = (Date.now() - touchStartRef.current.time) / 1000;
+    const dy = touchStartRef.current.y - touch.clientY; // ลากขึ้น dy จะเป็นบวก
 
     touchStartRef.current = null;
 
-    // ต้องปัดขึ้นด้านบน (dy เป็นลบ)
-    if (dy >= -50) return;
+    // ซ่อนเส้นนำทางวิถีทันทีเมื่อปล่อยนิ้ว
+    if (typeof window !== "undefined" && (window as any).hideTrajectoryGuide) {
+      (window as any).hideTrajectoryGuide();
+    }
 
-    const swipeDist = Math.sqrt(dx * dx + dy * dy);
-    if (swipeDist < 30 || dt === 0) return;
+    // ต้องปัดขึ้นด้านบนด้วยระยะอย่างน้อย 40px
+    if (dy < 40) return;
 
-    const speed = swipeDist / dt;
-    // ปรับความเร็วในการลากให้อยู่ในขอบเขตที่เหมาะสม
-    const clampedSpeed = Math.min(Math.max(speed, 500), 4000);
-
-    // คำนวณความเร็วเริ่มต้นในพิกัดกล้อง (Local coordinates)
-    // แกน Z: ชู้ตไปข้างหน้า (-4.0 ถึง -8.5 m/s)
-    const tZ = -4.0 - ((clampedSpeed - 500) / 3500) * 4.5;
-    // แกน X: หันเหซ้ายขวาตามทิศการปัด
-    const tX = (dx / window.innerWidth) * 3.5;
-    // แกน Y: ย้อยลูกบาสลอยขึ้นทำวิถีโค้งพาราโบลา
-    const tY = 4.0 + ((clampedSpeed - 500) / 3500) * 3.5;
-
-    if (typeof window !== "undefined" && (window as any).throwBasketball && typeof XR8 !== "undefined") {
-      const { camera } = XR8.Threejs.xrScene();
-      if (camera) {
-        const localVelocity = new THREE.Vector3(tX, tY, tZ);
-        // แปลงความเร็วตามมุมทิศที่กล้องกำลังส่องอยู่จริงในระบบโลก 3D
-        const worldVelocity = localVelocity.applyQuaternion(camera.quaternion);
+    if (typeof window !== "undefined" && (window as any).throwBasketball && (window as any).getShootVelocity) {
+      const worldVelocity = (window as any).getShootVelocity(dy);
+      if (worldVelocity) {
         (window as any).throwBasketball(worldVelocity);
       }
     }
@@ -145,23 +146,52 @@ export default function BasketballScene() {
         id="camerafeed"
         className="absolute inset-0 w-full h-full object-cover"
         onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       ></canvas>
 
-      {/* ───────── UI HUD (Heads-Up Display) ───────── */}
-      <div className="absolute inset-x-0 top-0 z-10 flex flex-col items-center gap-2 p-4 bg-gradient-to-b from-black/60 to-transparent">
-        <div className="flex flex-col items-center rounded-xl bg-slate-900/80 backdrop-blur border border-white/10 px-4 py-2 text-white">
-          <span className="text-xs text-purple-400 font-bold tracking-widest">AR PLATFORM PREVIEW</span>
-          <span className="text-lg font-bold">🏀 Basketball Hoop Test Mode</span>
+      {/* ───────── UI Overlay บังคับปรับระดับโทรศัพท์ตั้งตรงก่อนเสกแป้น ───────── */}
+      {!gameState.isHoopPlaced && (
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/80 px-8 text-center text-white backdrop-blur-sm">
+          <div className="relative mb-6">
+            <div className="h-20 w-20 rounded-2xl border-4 border-dashed border-purple-500 animate-pulse flex items-center justify-center">
+              <span className="text-4xl">📱</span>
+            </div>
+            {gameState.isDeviceAligned && (
+              <div className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-emerald-500 flex items-center justify-center text-xs font-bold animate-ping" />
+            )}
+          </div>
+          <h2 className="text-xl font-bold mb-2">📌 กรุณาถือโทรศัพท์ตั้งตรง</h2>
+          <p className="text-slate-400 text-sm max-w-xs leading-relaxed mb-6">
+            หมุนโทรศัพท์ให้อยู่ในแนวตั้งฉากกับพื้นโลก (ระดับสายตา) เพื่อทำการเสกแป้นบาสเก็ตบอลตรงหน้าคุณ
+          </p>
+          <div className="flex items-center gap-2 rounded-full bg-white/5 border border-white/10 px-4 py-2 text-xs font-semibold">
+            สถานะ:{" "}
+            {gameState.isDeviceAligned ? (
+              <span className="text-emerald-400 font-bold">● กำลังเสกแป้นบาส...</span>
+            ) : (
+              <span className="text-amber-400 font-bold">● ระดับยังไม่ได้องศา</span>
+            )}
+          </div>
         </div>
+      )}
 
-        {/* บอร์ดแสดงสถิติคะแนน */}
-        <div className="flex items-center gap-4 rounded-lg bg-slate-900/90 backdrop-blur border border-white/10 px-4 py-1.5 text-sm text-white font-mono">
-          <div>คะแนน: <span className="text-amber-400 font-bold text-base">{gameState.score}</span></div>
-          <div className="h-3 w-px bg-white/20" />
-          <div>เหลือ: <span className="text-purple-400 font-bold text-base">{gameState.ballsLeft}</span> ลูก</div>
+      {/* ───────── UI HUD (Heads-Up Display) ───────── */}
+      {gameState.isHoopPlaced && (
+        <div className="absolute inset-x-0 top-0 z-10 flex flex-col items-center gap-2 p-4 bg-gradient-to-b from-black/60 to-transparent">
+          <div className="flex flex-col items-center rounded-xl bg-slate-900/80 backdrop-blur border border-white/10 px-4 py-2 text-white">
+            <span className="text-xs text-purple-400 font-bold tracking-widest">AR PLATFORM PREVIEW</span>
+            <span className="text-lg font-bold">🏀 Basketball Hoop Test Mode</span>
+          </div>
+
+          {/* บอร์ดแสดงสถิติคะแนน */}
+          <div className="flex items-center gap-4 rounded-lg bg-slate-900/90 backdrop-blur border border-white/10 px-4 py-1.5 text-sm text-white font-mono">
+            <div>คะแนน: <span className="text-amber-400 font-bold text-base">{gameState.score}</span></div>
+            <div className="h-3 w-px bg-white/20" />
+            <div>เหลือ: <span className="text-purple-400 font-bold text-base">{gameState.ballsLeft}</span> ลูก</div>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ข้อความแสดงสถานะชู้ตจังหวะ scored / missed */}
       {showStatus && (
