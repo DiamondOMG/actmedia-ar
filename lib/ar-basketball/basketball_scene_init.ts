@@ -10,6 +10,8 @@ export interface GameState {
   isHoopPlaced?: boolean;
   isDeviceAligned?: boolean;
   currentRound?: number;
+  isAssetLoaded?: boolean;
+  assetLoadProgress?: number;
 }
  
 export const initBasketballScenePipelineModule = (onStateChange: (state: Partial<GameState>) => void) => {
@@ -297,10 +299,27 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
       // โหลดโครงสร้างแป้นบาสเก็ตบอล (รอสปอว์น)
       hoopGroup = createSimpleHoop();
  
-      // โหลดโมเดล GLB ลูกบาสเก็ตบอลล่วงหน้า
-      new GLTFLoader().load('/3d/throwing/basketball.glb', (gltf) => {
-        ballModelTemplate = gltf.scene;
-      });
+      // ส่งสถานะเริ่มต้นการดาวน์โหลดโมเดล
+      onStateChange({ isAssetLoaded: false, assetLoadProgress: 0 });
+ 
+      // โหลดโมเดล GLB ลูกบาสเก็ตบอลล่วงหน้าพร้อมวัดเปอร์เซ็นต์โหลด
+      new GLTFLoader().load(
+        '/3d/throwing/basketball.glb',
+        (gltf) => {
+          ballModelTemplate = gltf.scene;
+          onStateChange({ isAssetLoaded: true, assetLoadProgress: 100 });
+        },
+        (xhr) => {
+          if (xhr.total > 0) {
+            const percent = Math.round((xhr.loaded / xhr.total) * 100);
+            onStateChange({ assetLoadProgress: percent });
+          }
+        },
+        (error) => {
+          console.error('Error loading basketball GLB, using fallback sphere:', error);
+          onStateChange({ isAssetLoaded: true, assetLoadProgress: 100 });
+        }
+      );
  
       // โหลดโครงสร้างเส้นประวิถีโค้ง
       trajectoryLine = createTrajectoryLine();
@@ -404,7 +423,7 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
           isHoopPlaced: false,
         });
  
-        if (isAligned) {
+        if (isAligned && ballModelTemplate) {
           spawnHoopForRound(1); // เสกแป้นบาสสำหรับรอบที่ 1
           resetBall();
         }

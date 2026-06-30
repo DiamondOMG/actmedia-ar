@@ -18,6 +18,8 @@ export default function BasketballScene() {
     score: 0,
     ballsLeft: 10,
     status: "idle",
+    isAssetLoaded: false,
+    assetLoadProgress: 0,
   });
   const [showStatus, setShowStatus] = useState<string | null>(null);
 
@@ -154,26 +156,50 @@ export default function BasketballScene() {
       {/* ───────── UI Overlay บังคับปรับระดับโทรศัพท์ตั้งตรงก่อนเสกแป้น ───────── */}
       {!gameState.isHoopPlaced && (
         <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/80 px-8 text-center text-white backdrop-blur-sm">
-          <div className="relative mb-6">
-            <div className="h-20 w-20 rounded-2xl border-4 border-dashed border-purple-500 animate-pulse flex items-center justify-center">
-              <span className="text-4xl">📱</span>
+          {!gameState.isAssetLoaded ? (
+            // หน้าจอแสดงความคืบหน้าการดาวน์โหลดโมเดล 3D
+            <div className="flex flex-col items-center animate-in fade-in duration-300">
+              <div className="relative mb-6">
+                <div className="h-20 w-20 rounded-2xl border-4 border-dashed border-purple-500 animate-spin flex items-center justify-center">
+                  <span className="text-4xl animate-none">🏀</span>
+                </div>
+              </div>
+              <h2 className="text-xl font-bold mb-2">📥 กำลังดาวน์โหลดโมเดลลูกบาส...</h2>
+              <p className="text-slate-400 text-sm max-w-xs leading-relaxed mb-6 font-mono">
+                กรุณารอสักครู่เพื่อเตรียมทรัพยากรเกมให้พร้อม {gameState.assetLoadProgress || 0}%
+              </p>
+              <div className="w-48 h-2 bg-white/10 rounded-full overflow-hidden border border-white/5">
+                <div 
+                  className="h-full bg-purple-500 transition-all duration-300 rounded-full" 
+                  style={{ width: `${gameState.assetLoadProgress || 0}%` }}
+                />
+              </div>
             </div>
-            {gameState.isDeviceAligned && (
-              <div className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-emerald-500 flex items-center justify-center text-xs font-bold animate-ping" />
-            )}
-          </div>
-          <h2 className="text-xl font-bold mb-2">📌 กรุณาถือโทรศัพท์ตั้งตรง</h2>
-          <p className="text-slate-400 text-sm max-w-xs leading-relaxed mb-6">
-            หมุนโทรศัพท์ให้อยู่ในแนวตั้งฉากกับพื้นโลก (ระดับสายตา) เพื่อทำการเสกแป้นบาสเก็ตบอลตรงหน้าคุณ
-          </p>
-          <div className="flex items-center gap-2 rounded-full bg-white/5 border border-white/10 px-4 py-2 text-xs font-semibold">
-            สถานะ:{" "}
-            {gameState.isDeviceAligned ? (
-              <span className="text-emerald-400 font-bold">● กำลังเสกแป้นบาส...</span>
-            ) : (
-              <span className="text-amber-400 font-bold">● ระดับยังไม่ได้องศา</span>
-            )}
-          </div>
+          ) : (
+            // หน้าจอเตือนตั้งตรงโทรศัพท์ตามระดับองศา
+            <>
+              <div className="relative mb-6">
+                <div className="h-20 w-20 rounded-2xl border-4 border-dashed border-purple-500 animate-pulse flex items-center justify-center">
+                  <span className="text-4xl">📱</span>
+                </div>
+                {gameState.isDeviceAligned && (
+                  <div className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-emerald-500 flex items-center justify-center text-xs font-bold animate-ping" />
+                )}
+              </div>
+              <h2 className="text-xl font-bold mb-2">📌 กรุณาถือโทรศัพท์ตั้งตรง</h2>
+              <p className="text-slate-400 text-sm max-w-xs leading-relaxed mb-6">
+                หมุนโทรศัพท์ให้อยู่ในแนวตั้งฉากกับพื้นโลก (ระดับสายตา) เพื่อทำการเสกแป้นบาสเก็ตบอลตรงหน้าคุณ
+              </p>
+              <div className="flex items-center gap-2 rounded-full bg-white/5 border border-white/10 px-4 py-2 text-xs font-semibold">
+                สถานะ:{" "}
+                {gameState.isDeviceAligned ? (
+                  <span className="text-emerald-400 font-bold">● กำลังเสกแป้นบาส...</span>
+                ) : (
+                  <span className="text-amber-400 font-bold">● ระดับยังไม่ได้องศา</span>
+                )}
+              </div>
+            </>
+          )}
         </div>
       )}
 
