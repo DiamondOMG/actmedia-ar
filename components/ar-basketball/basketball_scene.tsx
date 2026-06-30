@@ -21,6 +21,8 @@ export default function BasketballScene() {
   });
   const [showStatus, setShowStatus] = useState<string | null>(null);
 
+  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
+
   // เอฟเฟกต์แสดงข้อความสถานะ (เช่น Scored!, Missed!)
   useEffect(() => {
     if (gameState.status === "scored") {
@@ -81,22 +83,111 @@ export default function BasketballScene() {
   }, []);
 
   const handleReset = () => {
-    // รีเซ็ตเกมง่ายๆ โดยรีโหลดหน้าเว็บเพื่อเคลียร์ state และกล้อง XR
     router.refresh();
     window.location.reload();
   };
 
+  // ตรวจจับการเริ่มสัมผัสหน้าจอ
+  const handleTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (e.touches.length === 1 && gameState.status === "idle") {
+      const touch = e.touches[0];
+      touchStartRef.current = {
+        x: touch.clientX,
+        y: touch.clientY,
+        time: Date.now(),
+      };
+    }
+  };
+
+  // ตรวจจับการปล่อยนิ้วและคำนวณการปัดชู้ต
+  const handleTouchEnd = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (!touchStartRef.current || gameState.status !== "idle") return;
+
+    const touch = e.changedTouches[0];
+    const dx = touch.clientX - touchStartRef.current.x;
+    const dy = touch.clientY - touchStartRef.current.y;
+    const dt = (Date.now() - touchStartRef.current.time) / 1000;
+
+    touchStartRef.current = null;
+
+    // ต้องปัดขึ้นด้านบน (dy เป็นลบ)
+    if (dy >= -50) return;
+
+    const swipeDist = Math.sqrt(dx * dx + dy * dy);
+    if (swipeDist < 30 || dt === 0) return;
+
+    const speed = swipeDist / dt;
+    // ปรับความเร็วในการลากให้อยู่ในขอบเขตที่เหมาะสม
+    const clampedSpeed = Math.min(Math.max(speed, 500), 4000);
+
+    // คำนวณความเร็วเริ่มต้นในพิกัดกล้อง (Local coordinates)
+    // แกน Z: ชู้ตไปข้างหน้า (-4.0 ถึง -8.5 m/s)
+    const tZ = -4.0 - ((clampedSpeed - 500) / 3500) * 4.5;
+    // แกน X: หันเหซ้ายขวาตามทิศการปัด
+    const tX = (dx / window.innerWidth) * 3.5;
+    // แกน Y: ย้อยลูกบาสลอยขึ้นทำวิถีโค้งพาราโบลา
+    const tY = 4.0 + ((clampedSpeed - 500) / 3500) * 3.5;
+
+    if (typeof window !== "undefined" && (window as any).throwBasketball && typeof XR8 !== "undefined") {
+      const { camera } = XR8.Threejs.xrScene();
+      if (camera) {
+        const localVelocity = new THREE.Vector3(tX, tY, tZ);
+        // แปลงความเร็วตามมุมทิศที่กล้องกำลังส่องอยู่จริงในระบบโลก 3D
+        const worldVelocity = localVelocity.applyQuaternion(camera.quaternion);
+        (window as any).throwBasketball(worldVelocity);
+      }
+    }
+  };
+
   return (
-    <div ref={containerRef} className="absolute inset-0 w-full h-full bg-black overflow-hidden">
-      <canvas id="camerafeed" className="absolute inset-0 w-full h-full object-cover"></canvas>
+    <div ref={containerRef} className="absolute inset-0 w-full h-full bg-black overflow-hidden select-none">
+      <canvas
+        id="camerafeed"
+        className="absolute inset-0 w-full h-full object-cover"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      ></canvas>
 
       {/* ───────── UI HUD (Heads-Up Display) ───────── */}
-      <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-center p-4 bg-gradient-to-b from-black/60 to-transparent">
+      <div className="absolute inset-x-0 top-0 z-10 flex flex-col items-center gap-2 p-4 bg-gradient-to-b from-black/60 to-transparent">
         <div className="flex flex-col items-center rounded-xl bg-slate-900/80 backdrop-blur border border-white/10 px-4 py-2 text-white">
           <span className="text-xs text-purple-400 font-bold tracking-widest">AR PLATFORM PREVIEW</span>
           <span className="text-lg font-bold">🏀 Basketball Hoop Test Mode</span>
         </div>
+
+        {/* บอร์ดแสดงสถิติคะแนน */}
+        <div className="flex items-center gap-4 rounded-lg bg-slate-900/90 backdrop-blur border border-white/10 px-4 py-1.5 text-sm text-white font-mono">
+          <div>คะแนน: <span className="text-amber-400 font-bold text-base">{gameState.score}</span></div>
+          <div className="h-3 w-px bg-white/20" />
+          <div>เหลือ: <span className="text-purple-400 font-bold text-base">{gameState.ballsLeft}</span> ลูก</div>
+        </div>
       </div>
+
+      {/* ข้อความแสดงสถานะชู้ตจังหวะ scored / missed */}
+      {showStatus && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
+          <div className="px-6 py-3 rounded-2xl bg-black/85 border border-white/20 text-2xl font-black text-white shadow-2xl animate-bounce">
+            {showStatus}
+          </div>
+        </div>
+      )}
+
+      {/* บอร์ดสรุปคะแนนหลังเล่นจบ 10 ลูก */}
+      {gameState.ballsLeft === 0 && gameState.status === "idle" && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm px-6">
+          <div className="bg-slate-900 border border-white/10 rounded-3xl p-6 max-w-sm w-full text-center text-white shadow-2xl animate-in zoom-in-95">
+            <h2 className="text-2xl font-bold mb-2">🎉 จบเกมทดสอบ</h2>
+            <p className="text-slate-400 text-sm mb-4">คุณทำคะแนนได้ทั้งหมด</p>
+            <div className="text-5xl font-black text-amber-400 mb-6">{gameState.score} คะแนน</div>
+            <button
+              onClick={handleReset}
+              className="w-full py-3.5 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-2xl transition active:scale-95"
+            >
+              เล่นอีกครั้ง
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ───────── ปุ่มควบคุมหลักด้านล่าง ───────── */}
       <div className="absolute bottom-4 left-4 right-4 z-10 flex items-center justify-between pointer-events-auto">
