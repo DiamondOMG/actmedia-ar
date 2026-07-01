@@ -48,33 +48,82 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
   const ringRadius = 0.28;
   const gravity = 9.81;
  
-  // 1. วาดแป้นและห่วงบาสเกตบอลแบบง่ายๆ
+  // 1. วาดแป้นและห่วงบาสเกตบอลแบบใกล้เคียงของจริง (โค้งพัด)
   const createSimpleHoop = (): THREE.Group => {
     const hoop = new THREE.Group();
- 
-    // แป้น (Backboard)
-    const boardGeo = new THREE.BoxGeometry(1.2, 0.8, 0.03);
-    const boardMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.7 });
-    const board = new THREE.Mesh(boardGeo, boardMat);
-    board.position.set(0, 0.4, 0);
+
+    // 1.1 สร้าง Shape แป้นบาสทรงพัด (Fan-shaped Backboard)
+    const boardShape = new THREE.Shape();
+    boardShape.moveTo(-0.5, 0);
+    boardShape.lineTo(0.5, 0);
+    boardShape.quadraticCurveTo(0.6, 0, 0.6, 0.1);
+    boardShape.lineTo(0.6, 0.35);
+    boardShape.absarc(0, 0.35, 0.6, 0, Math.PI, false);
+    boardShape.lineTo(-0.6, 0.1);
+    boardShape.quadraticCurveTo(-0.6, 0, -0.5, 0);
+
+    const extrudeSettings = {
+      depth: 0.03,
+      bevelEnabled: true,
+      bevelSegments: 2,
+      steps: 1,
+      bevelSize: 0.005,
+      bevelThickness: 0.005,
+    };
+
+    const boardGeo = new THREE.ExtrudeGeometry(boardShape, extrudeSettings);
+
+    // 1.2 สร้าง Canvas Texture สำหรับหน้าแป้น (สีขาว + กรอบสี่เหลี่ยมสีส้ม)
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 384;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      // พื้นหลังสีขาว
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, 512, 384);
+
+      // วาดกรอบสี่เหลี่ยมสีส้ม
+      ctx.strokeStyle = '#ff5500';
+      ctx.lineWidth = 14;
+      const rectW = 192;
+      const rectH = 140;
+      const rectX = (512 - rectW) / 2;
+      const rectY = 384 - 55 - rectH;
+      ctx.strokeRect(rectX, rectY, rectW, rectH);
+    }
+    const boardTexture = new THREE.CanvasTexture(canvas);
+
+    const frontMat = new THREE.MeshStandardMaterial({
+      map: boardTexture,
+      roughness: 0.5,
+      metalness: 0.1,
+    });
+    const sideMat = new THREE.MeshStandardMaterial({
+      color: 0xdddddd,
+      roughness: 0.6,
+    });
+
+    const board = new THREE.Mesh(boardGeo, [frontMat, sideMat]);
+    board.position.set(0, 0, 0);
     hoop.add(board);
- 
-    // กรอบสีส้มบนแป้นบาส
-    const borderGeo = new THREE.BoxGeometry(0.5, 0.35, 0.04);
-    const borderMat = new THREE.MeshStandardMaterial({ color: 0xff5500, roughness: 0.5 });
-    const border = new THREE.Mesh(borderGeo, borderMat);
-    border.position.set(0, 0.25, 0.005);
-    hoop.add(border);
- 
-    // ห่วง (Ring) สีส้ม
+
+    // 1.3 ตัวยึดห่วงสีส้ม (Orange Bracket)
+    const bracketGeo = new THREE.BoxGeometry(0.14, 0.10, 0.06);
+    const bracketMat = new THREE.MeshStandardMaterial({ color: 0xff5500, roughness: 0.5 });
+    const bracket = new THREE.Mesh(bracketGeo, bracketMat);
+    bracket.position.set(0, 0.1, 0.045);
+    hoop.add(bracket);
+
+    // 1.4 ห่วง (Ring) สีส้ม
     const ringGeo = new THREE.TorusGeometry(ringRadius, 0.015, 8, 24);
     const ringMat = new THREE.MeshStandardMaterial({ color: 0xff5500, roughness: 0.2 });
     const ring = new THREE.Mesh(ringGeo, ringMat);
     ring.rotation.x = Math.PI / 2;
-    ring.position.set(0, 0.1, 0.35); // ยื่นออกมาข้างหน้าแป้น
+    ring.position.set(0, 0.1, 0.35); // ยื่นออกมาข้างหน้าแป้นให้ได้ตำแหน่งฟิสิกส์เดิม
     hoop.add(ring);
- 
-    // ตาข่าย
+
+    // 1.5 ตาข่าย
     const netGeo = new THREE.CylinderGeometry(ringRadius, ringRadius * 0.7, 0.35, 12, 1, true);
     const netMat = new THREE.MeshBasicMaterial({ color: 0xeeeeee, wireframe: true, transparent: true, opacity: 0.7 });
     const net = new THREE.Mesh(netGeo, netMat);
