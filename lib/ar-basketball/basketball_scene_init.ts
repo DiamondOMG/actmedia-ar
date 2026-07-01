@@ -53,16 +53,16 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
     const hoop = new THREE.Group();
 
     // 1.1 สร้าง Shape แป้นบาสทรงพัด (Fan-shaped Backboard)
-    const boardShape = new THREE.Shape();
-    boardShape.moveTo(-0.5, 0);
-    boardShape.lineTo(0.5, 0);
-    boardShape.quadraticCurveTo(0.6, 0, 0.6, 0.1);
-    boardShape.lineTo(0.6, 0.35);
-    boardShape.absarc(0, 0.35, 0.6, 0, Math.PI, false);
-    boardShape.lineTo(-0.6, 0.1);
-    boardShape.quadraticCurveTo(-0.6, 0, -0.5, 0);
+    const board_shape = new THREE.Shape();
+    board_shape.moveTo(-0.5, 0);
+    board_shape.lineTo(0.5, 0);
+    board_shape.quadraticCurveTo(0.6, 0, 0.6, 0.1);
+    board_shape.lineTo(0.6, 0.35);
+    board_shape.absarc(0, 0.35, 0.6, 0, Math.PI, false);
+    board_shape.lineTo(-0.6, 0.1);
+    board_shape.quadraticCurveTo(-0.6, 0, -0.5, 0);
 
-    const extrudeSettings = {
+    const extrude_settings = {
       depth: 0.03,
       bevelEnabled: true,
       bevelSegments: 2,
@@ -71,7 +71,7 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
       bevelThickness: 0.005,
     };
 
-    const boardGeo = new THREE.ExtrudeGeometry(boardShape, extrudeSettings);
+    const board_geo = new THREE.ExtrudeGeometry(board_shape, extrude_settings);
 
     // 1.2 สร้าง Canvas Texture สำหรับหน้าแป้น (สีขาว + กรอบสี่เหลี่ยมสีส้ม)
     const canvas = document.createElement('canvas');
@@ -79,58 +79,96 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
     canvas.height = 384;
     const ctx = canvas.getContext('2d');
     if (ctx) {
-      // พื้นหลังสีขาว
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, 512, 384);
-
-      // วาดกรอบสี่เหลี่ยมสีส้ม
       ctx.strokeStyle = '#ff5500';
       ctx.lineWidth = 14;
-      const rectW = 192;
-      const rectH = 140;
-      const rectX = (512 - rectW) / 2;
-      const rectY = 384 - 55 - rectH;
-      ctx.strokeRect(rectX, rectY, rectW, rectH);
+      const rect_w = 192;
+      const rect_h = 140;
+      const rect_x = (512 - rect_w) / 2;
+      const rect_y = 384 - 55 - rect_h;
+      ctx.strokeRect(rect_x, rect_y, rect_w, rect_h);
     }
-    const boardTexture = new THREE.CanvasTexture(canvas);
+    const board_texture = new THREE.CanvasTexture(canvas);
 
-    const frontMat = new THREE.MeshStandardMaterial({
-      map: boardTexture,
+    const front_mat = new THREE.MeshStandardMaterial({
+      map: board_texture,
       roughness: 0.5,
       metalness: 0.1,
     });
-    const sideMat = new THREE.MeshStandardMaterial({
-      color: 0xdddddd,
+    const side_mat = new THREE.MeshStandardMaterial({
+      color: 0xcccccc,
       roughness: 0.6,
     });
 
-    const board = new THREE.Mesh(boardGeo, [frontMat, sideMat]);
-    board.position.set(0, 0, 0);
-    hoop.add(board);
+    const board_mesh = new THREE.Mesh(board_geo, [side_mat, front_mat]);
+    board_mesh.position.set(0, 0, 0);
+    hoop.add(board_mesh);
 
-    // 1.3 ตัวยึดห่วงสีส้ม (Orange Bracket)
-    const bracketGeo = new THREE.BoxGeometry(0.14, 0.10, 0.06);
-    const bracketMat = new THREE.MeshStandardMaterial({ color: 0xff5500, roughness: 0.5 });
-    const bracket = new THREE.Mesh(bracketGeo, bracketMat);
-    bracket.position.set(0, 0.1, 0.045);
-    hoop.add(bracket);
+    // 1.3 ส่วนห่วงบาสเก็ตบอลจำลองเดิม (ใช้เป็น fallback จนกว่าโมเดล 3D จะโหลดเสร็จ)
+    const fallback_group = new THREE.Group();
+    fallback_group.name = "fallback-hoop";
 
-    // 1.4 ห่วง (Ring) สีส้ม
-    const ringGeo = new THREE.TorusGeometry(ringRadius, 0.015, 8, 24);
-    const ringMat = new THREE.MeshStandardMaterial({ color: 0xff5500, roughness: 0.2 });
-    const ring = new THREE.Mesh(ringGeo, ringMat);
-    ring.rotation.x = Math.PI / 2;
-    ring.position.set(0, 0.1, 0.35); // ยื่นออกมาข้างหน้าแป้นให้ได้ตำแหน่งฟิสิกส์เดิม
-    hoop.add(ring);
+    const bracket_geo = new THREE.BoxGeometry(0.14, 0.10, 0.06);
+    const bracket_mat = new THREE.MeshStandardMaterial({ color: 0xff5500, roughness: 0.5 });
+    const bracket_mesh = new THREE.Mesh(bracket_geo, bracket_mat);
+    bracket_mesh.position.set(0, 0.1, 0.045);
+    fallback_group.add(bracket_mesh);
 
-    // 1.5 ตาข่าย
-    const netGeo = new THREE.CylinderGeometry(ringRadius, ringRadius * 0.7, 0.35, 12, 1, true);
-    const netMat = new THREE.MeshBasicMaterial({ color: 0xeeeeee, wireframe: true, transparent: true, opacity: 0.7 });
-    const net = new THREE.Mesh(netGeo, netMat);
-    net.position.set(0, -0.075, 0.35);
-    hoop.add(net);
- 
+    const ring_geo = new THREE.TorusGeometry(ringRadius, 0.015, 8, 24);
+    const ring_mat = new THREE.MeshStandardMaterial({ color: 0xff5500, roughness: 0.2 });
+    const ring_mesh = new THREE.Mesh(ring_geo, ring_mat);
+    ring_mesh.rotation.x = Math.PI / 2;
+    ring_mesh.position.set(0, 0.1, 0.35); 
+    fallback_group.add(ring_mesh);
+
+    const net_geo = new THREE.CylinderGeometry(ringRadius, ringRadius * 0.7, 0.35, 12, 1, true);
+    const net_mat = new THREE.MeshBasicMaterial({ color: 0xeeeeee, wireframe: true, transparent: true, opacity: 0.7 });
+    const net_mesh = new THREE.Mesh(net_geo, net_mat);
+    net_mesh.position.set(0, -0.075, 0.35);
+    fallback_group.add(net_mesh);
+
+    hoop.add(fallback_group);
+
     return hoop;
+  };
+
+  // จัดการจัดตำแหน่งพิกัด สเกล และความเอียงของโมเดลห่วงจริงตามค่าจาก debug tool
+  const setup_loaded_hoop = (loaded_hoop: THREE.Group) => {
+    // อัปเดตสเกลตัวแบบ
+    const scale_factor = 1.006700;
+    loaded_hoop.scale.setScalar(scale_factor);
+
+    // ตั้งค่าพิกัดออฟเซ็ตตำแหน่งจริงเพื่อให้ครอบพอดีเขตชน (Z=0.35, Y=0.1)
+    loaded_hoop.position.set(0.0000, 0.0443, 0.3295);
+
+    // ปรับองศาความเอียงของห่วง
+    loaded_hoop.rotation.set(
+      0.6 * Math.PI / 180, 
+      -91.5 * Math.PI / 180, 
+      0.6 * Math.PI / 180
+    );
+
+    // เปิดการแสดงผลผิวสองด้านเพื่อความคมชัด
+    loaded_hoop.traverse((child: any) => {
+      if (child.isMesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+        if (child.material) {
+          child.material.side = THREE.DoubleSide;
+        }
+      }
+    });
+
+    // ซ่อนห่วงแบบจำลองเดิม
+    const fallback_group = hoopGroup.getObjectByName("fallback-hoop");
+    if (fallback_group) {
+      fallback_group.visible = false;
+    }
+
+    loaded_hoop.name = "glb-hoop";
+    hoopGroup.add(loaded_hoop);
+    console.log("Hoop GLB successfully mounted!");
   };
  
   // 2. สร้าง Object3D ลูกบาสเกตบอล (clone จาก GLB หรือ fallback เป็น sphere)
@@ -360,22 +398,62 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
       // ส่งสถานะเริ่มต้นการดาวน์โหลดโมเดล
       onStateChange({ isAssetLoaded: false, assetLoadProgress: 0 });
  
-      // โหลดโมเดล GLB ลูกบาสเก็ตบอลล่วงหน้าพร้อมวัดเปอร์เซ็นต์โหลด
+      let ball_loaded = false;
+      let hoop_loaded = false;
+      let ball_progress = 0;
+      let hoop_progress = 0;
+
+      const update_progress = () => {
+        const total_progress = Math.round((ball_progress + hoop_progress) / 2);
+        onStateChange({
+          assetLoadProgress: total_progress,
+          isAssetLoaded: ball_loaded && hoop_loaded
+        });
+      };
+
+      // 1. โหลดโมเดล GLB ลูกบาสเก็ตบอล
       new GLTFLoader().load(
         '/3d/throwing/basketball.glb',
         (gltf) => {
           ballModelTemplate = gltf.scene;
-          onStateChange({ isAssetLoaded: true, assetLoadProgress: 100 });
+          ball_loaded = true;
+          ball_progress = 100;
+          update_progress();
         },
         (xhr) => {
           if (xhr.total > 0) {
-            const percent = Math.round((xhr.loaded / xhr.total) * 100);
-            onStateChange({ assetLoadProgress: percent });
+            ball_progress = Math.round((xhr.loaded / xhr.total) * 100);
+            update_progress();
           }
         },
         (error) => {
-          console.error('Error loading basketball GLB, using fallback sphere:', error);
-          onStateChange({ isAssetLoaded: true, assetLoadProgress: 100 });
+          console.error('Error loading basketball GLB:', error);
+          ball_loaded = true;
+          ball_progress = 100;
+          update_progress();
+        }
+      );
+
+      // 2. โหลดโมเดล GLB ห่วงบาสเก็ตบอล
+      new GLTFLoader().load(
+        '/basketball/basketball hoop 3d model (2).glb',
+        (gltf) => {
+          setup_loaded_hoop(gltf.scene);
+          hoop_loaded = true;
+          hoop_progress = 100;
+          update_progress();
+        },
+        (xhr) => {
+          if (xhr.total > 0) {
+            hoop_progress = Math.round((xhr.loaded / xhr.total) * 100);
+            update_progress();
+          }
+        },
+        (error) => {
+          console.error('Error loading hoop GLB:', error);
+          hoop_loaded = true;
+          hoop_progress = 100;
+          update_progress();
         }
       );
  
