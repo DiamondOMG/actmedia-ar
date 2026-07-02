@@ -19,12 +19,13 @@ export default function TestVibratePage() {
 
   useEffect(() => {
     if (typeof navigator !== "undefined") {
-      setIsSupported(!!navigator.vibrate);
+      const hasVibrate = "vibrate" in navigator && typeof navigator.vibrate === "function";
+      setIsSupported(hasVibrate);
       addLog(
-        navigator.vibrate
+        hasVibrate
           ? "Vibration API พร้อมใช้งานบนอุปกรณ์นี้"
           : "Vibration API ไม่รองรับบนอุปกรณ์/เบราว์เซอร์นี้",
-        navigator.vibrate ? "success" : "error"
+        hasVibrate ? "success" : "error"
       );
     }
     return () => {
@@ -39,7 +40,8 @@ export default function TestVibratePage() {
   };
 
   const triggerVibrate = (duration: number = 1000, label: string) => {
-    if (typeof navigator === "undefined" || !navigator.vibrate) {
+    const hasVibrate = typeof navigator !== "undefined" && "vibrate" in navigator && typeof navigator.vibrate === "function";
+    if (!hasVibrate) {
       addLog(`[${label}] ล้มเหลว: ไม่รองรับ Vibration API`, "error");
       return;
     }
