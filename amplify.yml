@@ -1,0 +1,27 @@
+version: 1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        # เปิดใช้งานและติดตั้ง pnpm
+        - npm install -g pnpm
+        - pnpm install
+        # เขียนตัวแปรความลับลงไฟล์ .env.production เพื่อให้ Next.js ดึงไปใช้ตอน Build
+        - echo "TURSO_DB_URL=$TURSO_DB_URL" >> .env.production
+        - echo "TURSO_TOKEN=$TURSO_TOKEN" >> .env.production
+        - echo "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY" >> .env.production
+        - echo "CLERK_SECRET_KEY=$CLERK_SECRET_KEY" >> .env.production
+        - echo "NEXT_PUBLIC_CLERK_SIGN_IN_URL=$NEXT_PUBLIC_CLERK_SIGN_IN_URL" >> .env.production
+        - echo "NEXT_PUBLIC_CLERK_SIGN_UP_URL=$NEXT_PUBLIC_CLERK_SIGN_UP_URL" >> .env.production
+        - echo "CLERK_WEBHOOK_SECRET=$CLERK_WEBHOOK_SECRET" >> .env.production
+    build:
+      commands:
+        - pnpm build
+  artifacts:
+    baseDirectory: .next
+    files:
+      - '**/*'
+  cache:
+    paths:
+      - .next/cache/**/*
+      - node_modules/**/*

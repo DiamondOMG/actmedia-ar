@@ -26,6 +26,7 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
   const ballVelocity = new THREE.Vector3();
   let isBallThrown = false;
   let isHoopPlaced = false;
+  let isHoopModelLoaded = false;
  
   // ระบบทัวร์นาเมนต์ 3 รอบ
   let currentRound = 1;
@@ -440,6 +441,7 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
         (gltf) => {
           setup_loaded_hoop(gltf.scene);
           hoop_loaded = true;
+          isHoopModelLoaded = true;
           hoop_progress = 100;
           update_progress();
         },
@@ -452,6 +454,7 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
         (error) => {
           console.error('Error loading hoop GLB:', error);
           hoop_loaded = true;
+          isHoopModelLoaded = true;
           hoop_progress = 100;
           update_progress();
         }
@@ -569,7 +572,7 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
           isHoopPlaced: false,
         });
  
-        if (isAligned && ballModelTemplate) {
+        if (isAligned && ballModelTemplate && isHoopModelLoaded) {
           spawnHoopForRound(1); // เสกแป้นบาสสำหรับรอบที่ 1
           resetBall();
         }
