@@ -358,9 +358,6 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
       hasScoredThisThrow = true;
       canScore = false;
       score += 1;
-      if (typeof navigator !== 'undefined' && navigator.vibrate) {
-        navigator.vibrate(200); // สั่น 200 มิลลิวินาที
-      }
       onStateChange({ score, status: 'scored' });
     }
   };
@@ -488,6 +485,9 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
         if (isBallThrown || ballsLeft <= 0 || !isHoopPlaced) return;
         ballVelocity.copy(velocity);
         isBallThrown = true;
+        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+          navigator.vibrate(80); // สั่น 80ms ตอนปล่อยชู้ต
+        }
         onStateChange({ status: 'thrown' });
       };
  
