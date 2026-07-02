@@ -273,18 +273,18 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
     if (!ballMesh) return;
  
     const boardX = hoopGroup.position.x;
-    const boardY = hoopGroup.position.y + 0.4;
+    const boardY = hoopGroup.position.y + 0.475;
     const boardZ = hoopGroup.position.z;
  
     const halfWidth = 0.6;
-    const halfHeight = 0.4;
+    const halfHeight = 0.475;
     const thickness = 0.03;
  
     const localBallPos = ballMesh.position.clone().sub(hoopGroup.position);
     localBallPos.applyQuaternion(hoopGroup.quaternion.clone().invert());
  
     const withinX = localBallPos.x >= -halfWidth && localBallPos.x <= halfWidth;
-    const withinY = localBallPos.y >= 0.4 - halfHeight && localBallPos.y <= 0.4 + halfHeight;
+    const withinY = localBallPos.y >= 0.475 - halfHeight && localBallPos.y <= 0.475 + halfHeight;
  
     if (withinX && withinY) {
       const collisionLocalZ = thickness / 2 + ballRadius;
@@ -389,11 +389,11 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
       renderer.shadowMap.enabled = true;
  
       // เพิ่มแสงสว่าง
-      const ambientLight = new THREE.AmbientLight(0xffffff, 0.95);
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
       scene.add(ambientLight);
  
-      const dirLight = new THREE.DirectionalLight(0xffffff, 0.45);
-      dirLight.position.set(3, 8, 4);
+      const dirLight = new THREE.DirectionalLight(0xffffff, 0.95);
+      dirLight.position.set(0, 9, 5);
       scene.add(dirLight);
  
       // โหลดโครงสร้างแป้นบาสเก็ตบอล (รอสปอว์น)
