@@ -485,9 +485,6 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
         if (isBallThrown || ballsLeft <= 0 || !isHoopPlaced) return;
         ballVelocity.copy(velocity);
         isBallThrown = true;
-        if (typeof navigator !== 'undefined' && navigator.vibrate) {
-          navigator.vibrate(80); // สั่น 80ms ตอนปล่อยชู้ต
-        }
         onStateChange({ status: 'thrown' });
       };
  
