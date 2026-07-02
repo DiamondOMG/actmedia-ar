@@ -252,9 +252,54 @@ export default function BasketballScene() {
       {/* ข้อความแสดงสถานะชู้ตจังหวะ scored / missed */}
       {showStatus && (
         <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
-          <div className="px-6 py-3 rounded-2xl bg-black/85 border border-white/20 text-2xl font-black text-white shadow-2xl animate-bounce">
-            {showStatus}
-          </div>
+          {gameState.status === "scored" ? (
+            /* LED Scoreboard Popup (เนียนสไตล์บอร์ดจริง) */
+            <div className="flex flex-col items-center justify-center p-2.5 bg-[#4a4a4a] border-4 border-[#c0c0c0] rounded-[28px] w-[260px] shadow-2xl animate-in zoom-in-95 duration-200">
+              {/* ส่วนบน (Time & Team) */}
+              <div className="flex items-center justify-between w-full bg-[#1b1b1b] rounded-2xl px-4 py-2 border border-[#2b2b2b] mb-2">
+                <span className="text-xl font-extrabold italic tracking-widest text-white drop-shadow-[1px_1px_2px_rgba(0,0,0,0.8)]">GUEST</span>
+                <div className="bg-[#0c0c0c] border border-[#222] rounded-lg px-2.5 py-1">
+                  <span className="text-red-500 font-mono text-xs font-bold tracking-widest drop-shadow-[0_0_4px_rgba(239,68,68,0.9)]">
+                    01:00
+                  </span>
+                </div>
+              </div>
+              {/* ส่วนล่าง (Score 2 หลัก) */}
+              <div className="flex items-center justify-center gap-3 w-full bg-[#1b1b1b] rounded-2xl p-3.5 border border-[#2b2b2b]">
+                {/* หลักสิบ */}
+                <div className="relative bg-[#0a0a0a] border-2 border-[#151515] rounded-xl w-20 h-28 flex items-center justify-center shadow-inner overflow-hidden">
+                  <span className="text-7xl font-black text-[#ff1e1e] font-mono select-none drop-shadow-[0_0_10px_#ff0000] z-0 leading-none">
+                    {String(gameState.score).padStart(2, "0")[0]}
+                  </span>
+                  <div 
+                    className="absolute inset-0 pointer-events-none z-10" 
+                    style={{
+                      backgroundImage: 'radial-gradient(circle, rgba(0,0,0,0.9) 35%, transparent 40%)',
+                      backgroundSize: '4px 4px'
+                    }}
+                  />
+                </div>
+                {/* หลักหน่วย */}
+                <div className="relative bg-[#0a0a0a] border-2 border-[#151515] rounded-xl w-20 h-28 flex items-center justify-center shadow-inner overflow-hidden">
+                  <span className="text-7xl font-black text-[#ff1e1e] font-mono select-none drop-shadow-[0_0_10px_#ff0000] z-0 leading-none">
+                    {String(gameState.score).padStart(2, "0")[1]}
+                  </span>
+                  <div 
+                    className="absolute inset-0 pointer-events-none z-10" 
+                    style={{
+                      backgroundImage: 'radial-gradient(circle, rgba(0,0,0,0.9) 35%, transparent 40%)',
+                      backgroundSize: '4px 4px'
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* Missed banner */
+            <div className="px-6 py-3 rounded-2xl bg-black/85 border border-white/20 text-2xl font-black text-white shadow-2xl animate-bounce">
+              {showStatus}
+            </div>
+          )}
         </div>
       )}
 
