@@ -45,7 +45,7 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
   const hoopBasePosition = new THREE.Vector3();
 
   const ballRadius = 0.06; // hitbox radius (เมตร)
-  const ballModelScale = 0.005; // 0.06 / 12.0 (model radius = 12.0)
+  const ballModelScale = 0.062; // สเกลลูกเก่า
   const ringRadius = 0.28;
   const gravity = 9.81;
 
@@ -417,7 +417,7 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
 
       // 1. โหลดโมเดล GLB ลูกบาสเก็ตบอล
       new GLTFLoader().load(
-        '/basketball/basketball_classic_standard_ball.glb',
+        '/3d/throwing/basketball.glb',
         (gltf) => {
           ballModelTemplate = gltf.scene;
           ball_loaded = true;
