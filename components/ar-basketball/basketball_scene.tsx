@@ -23,14 +23,14 @@ export default function BasketballScene() {
   });
   const [showStatus, setShowStatus] = useState<string | null>(null);
   const [difficulty, setDifficulty] = useState<"easy" | "hard">("easy");
- 
+
   const toggleDifficulty = (mode: "easy" | "hard") => {
     setDifficulty(mode);
     if (typeof window !== "undefined" && (window as any).setDifficulty) {
       (window as any).setDifficulty(mode);
     }
   };
- 
+
   const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
 
   // เอฟเฟกต์แสดงข้อความสถานะ (เช่น Scored!, Missed!)
@@ -177,8 +177,8 @@ export default function BasketballScene() {
                 กรุณารอสักครู่เพื่อเตรียมทรัพยากรเกมให้พร้อม {gameState.assetLoadProgress || 0}%
               </p>
               <div className="w-48 h-2 bg-white/10 rounded-full overflow-hidden border border-white/5">
-                <div 
-                  className="h-full bg-purple-500 transition-all duration-300 rounded-full" 
+                <div
+                  className="h-full bg-purple-500 transition-all duration-300 rounded-full"
                   style={{ width: `${gameState.assetLoadProgress || 0}%` }}
                 />
               </div>
@@ -230,56 +230,34 @@ export default function BasketballScene() {
         <div className="absolute top-4 right-3 z-10 flex gap-1 rounded-xl bg-black/60 backdrop-blur-sm p-1 border border-white/10 font-mono text-[10px] font-bold">
           <button
             onClick={() => toggleDifficulty("easy")}
-            className={`px-3 py-1.5 rounded-lg transition active:scale-95 ${
-              difficulty === "easy"
+            className={`px-3 py-1.5 rounded-lg transition active:scale-95 ${difficulty === "easy"
                 ? "bg-purple-600 text-white shadow"
                 : "text-slate-400 hover:text-white"
-            }`}
+              }`}
           >
             EASY
           </button>
           <button
             onClick={() => toggleDifficulty("hard")}
-            className={`px-3 py-1.5 rounded-lg transition active:scale-95 ${
-              difficulty === "hard"
+            className={`px-3 py-1.5 rounded-lg transition active:scale-95 ${difficulty === "hard"
                 ? "bg-purple-600 text-white shadow"
                 : "text-slate-400 hover:text-white"
-            }`}
+              }`}
           >
             HARD
           </button>
         </div>
       )}
- 
+
       {/* ข้อความแสดงสถานะชู้ตจังหวะ scored / missed */}
       {showStatus && (
         <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
-          {gameState.status === "scored" ? (
-            /* LED Scoreboard Popup */
-            <div className="flex flex-col items-center justify-center p-2 bg-[#707070] border-4 border-[#a0a0a0] rounded-2xl w-64 shadow-2xl font-mono text-white animate-in zoom-in-95 duration-200">
-              {/* ส่วนบน */}
-              <div className="flex items-center justify-between w-full bg-[#1b1b1b] rounded-t-lg px-3 py-1.5 border-b-2 border-[#333]">
-                <span className="text-sm font-bold tracking-wider text-slate-300">GUEST</span>
-                <span className="text-red-500 font-bold text-sm tracking-widest drop-shadow-[0_0_4px_rgba(239,68,68,0.8)]">01:00</span>
-              </div>
-              {/* ส่วนล่าง */}
-              <div className="flex items-center justify-center w-full bg-[#151515] rounded-b-lg py-4 px-2">
-                <div className="bg-[#0f0f0f] border border-[#222] rounded px-6 py-2 flex items-center justify-center shadow-inner">
-                  <span className="text-5xl font-black text-red-600 tracking-widest drop-shadow-[0_0_8px_rgba(220,38,38,0.9)]">
-                    {String(gameState.score).padStart(2, "0")}
-                  </span>
-                </div>
-              </div>
-            </div>
-          ) : (
-            /* Missed banner */
-            <div className="px-6 py-3 rounded-2xl bg-black/85 border border-white/20 text-2xl font-black text-white shadow-2xl animate-bounce">
-              {showStatus}
-            </div>
-          )}
+          <div className="px-6 py-3 rounded-2xl bg-black/85 border border-white/20 text-2xl font-black text-white shadow-2xl animate-bounce">
+            {showStatus}
+          </div>
         </div>
       )}
- 
+
       {/* บอร์ดสรุปคะแนนหลังเล่นจบครบ 3 รอบ */}
       {gameState.ballsLeft === 0 && gameState.currentRound === 3 && gameState.status === "idle" && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md px-6">
@@ -287,13 +265,13 @@ export default function BasketballScene() {
             <span className="text-4xl mb-2 block">🏆</span>
             <h2 className="text-2xl font-bold mb-1">จบการแข่งขัน 3 รอบ</h2>
             <p className="text-slate-400 text-xs mb-5">สรุปคะแนนการทดสอบชู้ตบาสเก็ตบอล AR</p>
-            
+
             <div className="bg-white/5 rounded-2xl p-4 border border-white/5 mb-6">
               <div className="text-sm text-slate-400 mb-1">คะแนนรวมสุทธิ</div>
               <div className="text-5xl font-black text-amber-400 font-mono leading-none mb-1">{gameState.score}</div>
               <div className="text-[10px] text-slate-500">ยิงสำเร็จจากโอกาสทั้งหมด 9 ครั้ง</div>
             </div>
-            
+
             <button
               onClick={handleReset}
               className="w-full py-3.5 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-2xl transition active:scale-95 shadow-lg shadow-purple-600/30"
