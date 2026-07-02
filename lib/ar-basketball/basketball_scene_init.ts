@@ -358,6 +358,9 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
       hasScoredThisThrow = true;
       canScore = false;
       score += 1;
+      if (typeof navigator !== 'undefined' && "vibrate" in navigator && typeof navigator.vibrate === "function") {
+        navigator.vibrate(200); // สั่น 200ms
+      }
       onStateChange({ score, status: 'scored' });
     }
   };
