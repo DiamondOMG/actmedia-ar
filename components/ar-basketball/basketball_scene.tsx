@@ -254,9 +254,29 @@ export default function BasketballScene() {
       {/* ข้อความแสดงสถานะชู้ตจังหวะ scored / missed */}
       {showStatus && (
         <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
-          <div className="px-6 py-3 rounded-2xl bg-black/85 border border-white/20 text-2xl font-black text-white shadow-2xl animate-bounce">
-            {showStatus}
-          </div>
+          {gameState.status === "scored" ? (
+            /* LED Scoreboard Popup */
+            <div className="flex flex-col items-center justify-center p-2 bg-[#707070] border-4 border-[#a0a0a0] rounded-2xl w-64 shadow-2xl font-mono text-white animate-in zoom-in-95 duration-200">
+              {/* ส่วนบน */}
+              <div className="flex items-center justify-between w-full bg-[#1b1b1b] rounded-t-lg px-3 py-1.5 border-b-2 border-[#333]">
+                <span className="text-sm font-bold tracking-wider text-slate-300">GUEST</span>
+                <span className="text-red-500 font-bold text-sm tracking-widest drop-shadow-[0_0_4px_rgba(239,68,68,0.8)]">01:00</span>
+              </div>
+              {/* ส่วนล่าง */}
+              <div className="flex items-center justify-center w-full bg-[#151515] rounded-b-lg py-4 px-2">
+                <div className="bg-[#0f0f0f] border border-[#222] rounded px-6 py-2 flex items-center justify-center shadow-inner">
+                  <span className="text-5xl font-black text-red-600 tracking-widest drop-shadow-[0_0_8px_rgba(220,38,38,0.9)]">
+                    {String(gameState.score).padStart(2, "0")}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* Missed banner */
+            <div className="px-6 py-3 rounded-2xl bg-black/85 border border-white/20 text-2xl font-black text-white shadow-2xl animate-bounce">
+              {showStatus}
+            </div>
+          )}
         </div>
       )}
  
