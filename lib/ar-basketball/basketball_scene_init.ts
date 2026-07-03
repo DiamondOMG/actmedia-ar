@@ -17,7 +17,7 @@ export interface GameState {
 export const initBasketballScenePipelineModule = (onStateChange: (state: Partial<GameState>) => void) => {
   let scene: THREE.Scene;
   let hoopGroup: THREE.Group;
-  let trajectoryLine: THREE.Line | null = null;
+  let trajectoryPoints: THREE.Mesh[] = [];
   const clock = new THREE.Clock();
 
   // ตัวแปรด้านการควบคุมฟิสิกส์และสถานะเกม
@@ -188,23 +188,23 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
     return ball;
   };
 
-  // 3. สร้าง Line สำหรับจำลองวิถีโยนบาส (Trajectory Guide Line)
-  const createTrajectoryLine = (): THREE.Line => {
-    const maxPoints = 30;
-    const geometry = new THREE.BufferGeometry();
-    const positions = new Float32Array(maxPoints * 3);
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-
-    const material = new THREE.LineBasicMaterial({
+  // 3. สร้างกลุ่มเม็ดประสำหรับจำลองวิถีโยนบาส (Dotted Trajectory Guide)
+  const createTrajectoryPoints = (targetScene: THREE.Scene) => {
+    const maxPoints = 20;
+    // ปรับรัศมีเป็น 0.015 (3ซม.) เพื่อความหนาเด่นชัดบนทุกแพลตฟอร์มรวมถึง iOS
+    const geo = new THREE.SphereGeometry(0.015, 8, 8); 
+    const mat = new THREE.MeshBasicMaterial({
       color: 0xa855f7, // สีม่วงสดใส
-      linewidth: 3,
       transparent: true,
       opacity: 0.85,
     });
 
-    const line = new THREE.Line(geometry, material);
-    line.visible = false;
-    return line;
+    for (let i = 0; i < maxPoints; i++) {
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.visible = false;
+      targetScene.add(mesh);
+      trajectoryPoints.push(mesh);
+    }
   };
 
   // 4. สปอว์นแป้นบาสในแต่ละรอบ (สุ่ม X, Y และสลับระยะลึก Z แบบฟิก)
@@ -463,9 +463,8 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
         }
       );
 
-      // โหลดโครงสร้างเส้นประวิถีโค้ง
-      trajectoryLine = createTrajectoryLine();
-      scene.add(trajectoryLine);
+      // โหลดโครงสร้างเส้นประวิถีโค้ง (แบบกลุ่มเม็ดประเพื่อให้หนาขึ้นบน iOS)
+      createTrajectoryPoints(scene);
 
       canvas.addEventListener('touchmove', (e: Event) => e.preventDefault());
 
@@ -505,9 +504,9 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
       // สั่งปิดระบบเล็งและซ่อนเส้นไกด์
       (window as any).stopAiming = () => {
         isAiming = false;
-        if (trajectoryLine) {
-          trajectoryLine.visible = false;
-        }
+        trajectoryPoints.forEach(p => {
+          p.visible = false;
+        });
       };
 
       // ฟังก์ชันสำหรับดึงเวกเตอร์ยิงอ้างอิง
@@ -548,7 +547,10 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
       (window as any)._cleanupBasketball = () => {
         if (hoopGroup) scene.remove(hoopGroup);
         if (ballMesh) scene.remove(ballMesh);
-        if (trajectoryLine) scene.remove(trajectoryLine);
+        trajectoryPoints.forEach(p => {
+          if (p.parent) p.parent.remove(p);
+        });
+        trajectoryPoints = [];
         canvas.removeEventListener('touchstart', handleTouch, true);
         delete (window as any).throwBasketball;
         delete (window as any).startAiming;
@@ -675,43 +677,34 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
         ballMesh.rotateX(0.5 * dt);
 
         // อัปเดตและเรนเดอร์เส้นไกด์วิถีโค้งที่ 60fps ในลูปหลัก เพื่อให้หันตามมุมกล้องเรียลไทม์
-        if (isAiming && trajectoryLine) {
+        if (isAiming && trajectoryPoints.length > 0) {
           const worldVelocity = getVelocityFromDy(currentDy, camera);
-          const positions = trajectoryLine.geometry.attributes.position.array as Float32Array;
-          const maxPoints = 30;
-          const simDt = 0.05;
+          const maxPoints = 20;
+          const simDt = 0.065; // ระยะเวลาในการจำลองแต่ละจุดเพื่อให้วิถีโค้งกำลังดี
 
           const tempPos = new THREE.Vector3().copy(ballMesh.position);
           const tempVel = new THREE.Vector3().copy(worldVelocity);
-          let actualPointsCount = 0;
+          let activeCount = 0;
 
           for (let i = 0; i < maxPoints; i++) {
-            positions[i * 3] = tempPos.x;
-            positions[i * 3 + 1] = tempPos.y;
-            positions[i * 3 + 2] = tempPos.z;
-            actualPointsCount++;
+            const sphere = trajectoryPoints[i];
+            sphere.position.copy(tempPos);
+            sphere.visible = true;
+            activeCount++;
 
             tempVel.y -= gravity * simDt;
             tempPos.addScaledVector(tempVel, simDt);
 
-            if (tempVel.y < 0) {
+            // หากความเร็วตกดิ่งมากไป หรือ ตกต่ำกว่าระดับพื้นดิน ให้หยุดวาดต่อ
+            if (tempVel.y < -3.0 || tempPos.y < 0) {
               break;
             }
           }
 
-          const lastIndex = actualPointsCount - 1;
-          const lastX = positions[lastIndex * 3];
-          const lastY = positions[lastIndex * 3 + 1];
-          const lastZ = positions[lastIndex * 3 + 2];
-          for (let i = actualPointsCount; i < maxPoints; i++) {
-            positions[i * 3] = lastX;
-            positions[i * 3 + 1] = lastY;
-            positions[i * 3 + 2] = lastZ;
+          // ซ่อนเม็ดประส่วนเกิน
+          for (let i = activeCount; i < maxPoints; i++) {
+            trajectoryPoints[i].visible = false;
           }
-
-          trajectoryLine.geometry.attributes.position.needsUpdate = true;
-          trajectoryLine.geometry.setDrawRange(0, actualPointsCount);
-          trajectoryLine.visible = true;
         }
       }
     }
