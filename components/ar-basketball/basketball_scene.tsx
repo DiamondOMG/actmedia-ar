@@ -159,6 +159,8 @@ export default function BasketballScene() {
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd}
+        onContextMenu={(e) => e.preventDefault()}
       ></canvas>
 
       {/* ───────── UI Overlay บังคับปรับระดับโทรศัพท์ตั้งตรงก่อนเสกแป้น ───────── */}

@@ -32,4 +32,7 @@ body {
   left: 0;
   width: 100%;
   height: 100%;
+  -webkit-touch-callout: none; /* ป้องกันเมนูกดค้างบน iOS */
+  -webkit-user-select: none;   /* ป้องกันการเลือกครอบ */
+  user-select: none;
 }
