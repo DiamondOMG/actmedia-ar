@@ -40,7 +40,7 @@ export default function ARScene() {
   }, []);
 
   useEffect(() => {
-    const storeId = searchParams.get("store");
+    const storeId = searchParams.get("map") || searchParams.get("store");
     if (!storeId) {
       router.replace("/?store=demo_001");
       return;
@@ -56,7 +56,7 @@ export default function ARScene() {
         }
 
         // ดึง startId จาก URL (ถ้ามี)
-        const urlStart = searchParams.get("start");
+        const urlStart = searchParams.get("point") || searchParams.get("start");
         if (urlStart && data.waypoints[urlStart]) {
           positionProvider.nav_start_id = urlStart;
         } else {
@@ -64,7 +64,7 @@ export default function ARScene() {
         }
 
         // ดึง targetId จาก URL (ถ้ามี)
-        const urlTarget = searchParams.get("target");
+        const urlTarget = searchParams.get("destination") || searchParams.get("goto") || searchParams.get("target");
         if (urlTarget && data.waypoints[urlTarget]) {
           const dest = data.destinations?.find((d: any) => d.waypoint === urlTarget) || {
             waypoint: urlTarget,
@@ -292,7 +292,7 @@ export default function ARScene() {
                       return (
                         <a
                           key={store.id}
-                          href={`/ar?store=${store.id}`}
+                          href={`/ar/navigate?store=${store.id}`}
                           className={`flex items-center p-4 rounded-2xl transition-all border-2 text-left ${storeData?.store_id === store.id
                             ? 'bg-purple-600/30 border-purple-500 ring-2 ring-purple-500/50'
                             : 'bg-slate-800 border-slate-700 active:bg-slate-700'

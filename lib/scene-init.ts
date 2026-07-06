@@ -87,10 +87,15 @@ export const initScenePipelineModule = (storeData: StoreData | null) => {
 
       positionProvider.updateFromSlam(camera.position, camera.quaternion);
 
-      // Update target if user picked a new destination dynamically
-      if (storeData && positionProvider.nav_target_id && currentPath.length > 0 && currentPath[currentPath.length - 1] !== positionProvider.nav_target_id) {
-        const startId = positionProvider.nav_start_id || 'W1';
-        const newPath = findShortestPath(storeData.waypoints, storeData.edges, startId, positionProvider.nav_target_id);
+      // Update target or start point if user picked a new destination dynamically or scanned a new start node
+      const currentStartId = positionProvider.nav_start_id || 'W1';
+      const currentTargetId = positionProvider.nav_target_id || 'W5';
+      const pathNeedsUpdate = currentPath.length === 0 || 
+                              currentPath[currentPath.length - 1] !== currentTargetId || 
+                              currentPath[0] !== currentStartId;
+
+      if (storeData && pathNeedsUpdate) {
+        const newPath = findShortestPath(storeData.waypoints, storeData.edges, currentStartId, currentTargetId);
         if (newPath) {
           currentPath = newPath;
           currentWaypointIndex = 1;

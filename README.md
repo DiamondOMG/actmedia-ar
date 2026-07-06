@@ -132,13 +132,22 @@ ar-navigate/
 
 ### ผู้ใช้ทั่วไป (AR Navigation)
 ```
-QR Code → /ar?store={id}
+QR Code (รูปแบบใหม่) → /ar/navigate?map={map_id}&point={start_point}&goto={target_point}
+(หรือลิงก์รูปแบบเดิม: /ar?store={store_id}&start={start_point}&target={target_point} - มีระบบ Redirect รองรับ)
   → ARScene (client) → fetch /api/stores/{id}
     → Drizzle query Turso DB → return StoreData JSON
-  → A* pathfinding คำนวณเส้นทาง
+  → A* pathfinding คำนวณเส้นทาง (คำนวณใหม่ทันทีหากจุดสแกนปัจจุบันหรือเป้าหมายเปลี่ยน)
   → Three.js วาดลูกศร 3D นำทาง real-time
   → PositionProvider ติดตามตำแหน่งจาก SLAM
 ```
+
+#### 🔗 โครงสร้าง URL สำหรับ QR Code นำทาง
+คุณสามารถสร้าง QR Code ติดไว้ตามพื้นที่ต่างๆ โดยใช้ Query Parameters ได้ดังนี้:
+- **`map`** (หรือคีย์เดิม `store`): ID ของแผนที่/ห้าง (เช่น `demo_001`) — *จำเป็น*
+- **`point`** (หรือคีย์เดิม `start`): รหัส Waypoint ที่แปะ QR Code นั้นอยู่ (เช่น `W2`) เพื่อระบุพิกัดปัจจุบันของผู้ใช้เมื่อเริ่มสแกน — *ไม่บังคับ*
+- **`goto`** หรือ **`destination`** (หรือคีย์เดิม `target`): รหัส Waypoint ปลายทางที่ต้องการให้ล็อกเป้าหมายนำทางไปทันที (เช่น `W5`) — *ไม่บังคับ (หากไม่ระบุ ระบบจะแสดงปุ่มเมนูให้ผู้ใช้เลือกปลายทางเอง)*
+
+---
 
 ### แอดมิน (สร้างแผนที่)
 ```

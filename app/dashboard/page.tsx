@@ -158,7 +158,7 @@ export default async function DashboardPage() {
                         </Link>
                         <DeleteStoreBtn storeId={store.id} storeName={store.name} />
                         <Link 
-                          href={`/ar?store=${store.id}`}
+                          href={`/ar/navigate?store=${store.id}`}
                           className="inline-flex items-center gap-1.5 rounded-xl bg-purple-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-purple-500 transition-all duration-200"
                         >
                           เปิดกล้อง AR
