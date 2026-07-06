@@ -93,6 +93,16 @@ export default function MapEditorScene({ mode }: { mode?: string } = {}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
 
+  const [mapId, setMapId] = useState<string>("");
+
+  useEffect(() => {
+    if (storeId) {
+      setMapId(storeId);
+    } else {
+      setMapId(`map_${Date.now()}`);
+    }
+  }, [storeId]);
+
   // Core data
   const [wps, setWps] = useState<WP[]>([]);
   const [eds, setEds] = useState<Ed[]>([]);
@@ -324,7 +334,7 @@ export default function MapEditorScene({ mode }: { mode?: string } = {}) {
           ctx.strokeStyle = "#f59e0b";
           ctx.lineWidth = 2 / cam.z;
           ctx.stroke();
-          
+
           // Angle label
           const midA = (a1 + a2) / 2;
           const labelR = arcR + 14 / cam.z;
@@ -396,7 +406,7 @@ export default function MapEditorScene({ mode }: { mode?: string } = {}) {
         // หาทิศทางการเดินเพื่อแบ่งซีกวงกลม
         const parentId = findParentWp(wp.id, wps, eds);
         let refNode = parentId ? wps.find(w => w.id === parentId) : null;
-        
+
         if (!refNode) {
           const connected = eds.filter(e => e.from === wp.id || e.to === wp.id);
           if (connected.length > 0) {
@@ -404,7 +414,7 @@ export default function MapEditorScene({ mode }: { mode?: string } = {}) {
             refNode = wps.find(w => w.id === neighborId) || null;
           }
         }
-        
+
         let pathAngle = 0;
         let hasDirection = false;
         if (refNode) {
@@ -574,7 +584,7 @@ export default function MapEditorScene({ mode }: { mode?: string } = {}) {
           const sumY = loadedWps.reduce((sum, wp) => sum + wp.py, 0);
           const avgX = sumX / loadedWps.length;
           const avgY = sumY / loadedWps.length;
-          
+
           const wrap = wrapRef.current;
           if (wrap) {
             const rect = wrap.getBoundingClientRect();
@@ -627,7 +637,7 @@ export default function MapEditorScene({ mode }: { mode?: string } = {}) {
           pushHist();
           const edgeToDelete = eds[selEdge];
           setEds(prev => prev.filter((_, i) => i !== selEdge));
-          
+
           // ลบล็อกมุมที่ใช้ edge นี้
           setAngleLocks(prev => prev.filter(lock => {
             const isEdge1 = (edgeToDelete.from === lock.sharedWpId && edgeToDelete.to === lock.wp1Id) || (edgeToDelete.to === lock.sharedWpId && edgeToDelete.from === lock.wp1Id);
@@ -639,7 +649,7 @@ export default function MapEditorScene({ mode }: { mode?: string } = {}) {
           pushHist();
           setWps(prev => prev.filter(w => w.id !== selWpId));
           setEds(prev => prev.filter(x => x.from !== selWpId && x.to !== selWpId));
-          
+
           // ลบล็อกมุมที่ใช้ waypoint นี้
           setAngleLocks(prev => prev.filter(l => l.sharedWpId !== selWpId && l.wp1Id !== selWpId && l.wp2Id !== selWpId));
           if (edgeFrom === selWpId) setEdgeFrom(null);
@@ -994,7 +1004,6 @@ export default function MapEditorScene({ mode }: { mode?: string } = {}) {
     if (!mapName.trim()) { alert("กรุณากรอกชื่อ"); return; }
     setSaving(true);
 
-    const mapId = `map_${Date.now()}`;
     const w1 = wps[0];
 
     // Convert pixel → meter coordinates (relative to W1)
@@ -1155,13 +1164,13 @@ export default function MapEditorScene({ mode }: { mode?: string } = {}) {
 
   const calculateHeadingDeg = (side: "left" | "right") => {
     if (!selWpId) return 0;
-    
+
     const qrWp = wps.find(w => w.id === selWpId);
     if (!qrWp) return 0;
-    
+
     const parentId = findParentWp(selWpId, wps, eds);
     let refNode = parentId ? wps.find(w => w.id === parentId) : null;
-    
+
     if (!refNode) {
       const connected = eds.filter(e => e.from === selWpId || e.to === selWpId);
       if (connected.length > 0) {
@@ -1169,23 +1178,44 @@ export default function MapEditorScene({ mode }: { mode?: string } = {}) {
         refNode = wps.find(w => w.id === neighborId) || null;
       }
     }
-    
+
     if (!refNode) return 0;
-    
+
     const vx = qrWp.px - refNode.px;
     const vy = qrWp.py - refNode.py;
     const pathAngle = Math.atan2(vy, vx);
-    
+
     let headingRad = pathAngle;
     if (side === "left") {
       headingRad = pathAngle - Math.PI / 2;
     } else {
       headingRad = pathAngle + Math.PI / 2;
     }
-    
+
     let deg = (headingRad * 180 / Math.PI) % 360;
     if (deg < 0) deg += 360;
     return Math.round(deg);
+  };
+
+  const handleDownloadQR = async (url: string, wpId: string) => {
+    const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(url)}`;
+    const fileName = `QR_${mapId}_${wpId}.png`;
+    try {
+      const res = await fetch(qrApiUrl);
+      if (!res.ok) throw new Error("Network response was not ok");
+      const blob = await res.blob();
+      const downloadUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(downloadUrl);
+    } catch (err) {
+      console.warn("Failed to download QR code directly, opening in new tab:", err);
+      window.open(qrApiUrl, "_blank");
+    }
   };
 
   /* ─── JSX ──────────────────────────────────────────── */
@@ -1233,8 +1263,8 @@ export default function MapEditorScene({ mode }: { mode?: string } = {}) {
               else alert("ต้องมี ≥ 2 จุด + ≥ 1 เส้น + ใส่ระยะอย่างน้อย 1 เส้น");
             }}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${canSave
-                ? "bg-purple-600 hover:bg-purple-500 text-white"
-                : "bg-slate-800 text-slate-500 cursor-not-allowed"
+              ? "bg-purple-600 hover:bg-purple-500 text-white"
+              : "bg-slate-800 text-slate-500 cursor-not-allowed"
               }`}
           >
             <Check size={14} /> บันทึก
@@ -1266,7 +1296,7 @@ export default function MapEditorScene({ mode }: { mode?: string } = {}) {
                 pushHist();
                 const edgeToDelete = eds[selEdge];
                 setEds(prev => prev.filter((_, i) => i !== selEdge));
-                
+
                 // ลบล็อกมุมที่ใช้ edge นี้
                 setAngleLocks(prev => prev.filter(lock => {
                   const isEdge1 = (edgeToDelete.from === lock.sharedWpId && edgeToDelete.to === lock.wp1Id) || (edgeToDelete.to === lock.sharedWpId && edgeToDelete.from === lock.wp1Id);
@@ -1325,6 +1355,90 @@ export default function MapEditorScene({ mode }: { mode?: string } = {}) {
               📏 คลิกเส้นเพื่อใส่ระยะจริง (เมตร)
             </div>
           )}
+        </div>
+
+        {/* ── Right Sidebar (Map Details & QR Links) ── */}
+        <div className="w-72 shrink-0 border-l border-white/10 bg-slate-900/80 backdrop-blur-lg flex flex-col overflow-hidden z-10 font-sans">
+          {/* Header */}
+          <div className="p-4 border-b border-white/10 shrink-0">
+            <h3 className="font-bold text-sm text-slate-200">🗺️ รายละเอียดแผนที่</h3>
+            <p className="text-[10px] text-slate-500 font-mono mt-1 select-all break-all">{mapId || "ยังไม่ได้บันทึก"}</p>
+          </div>
+
+          {/* Stats */}
+          <div className="p-4 bg-slate-900/40 border-b border-white/5 grid grid-cols-3 gap-2 text-center shrink-0">
+            <div className="bg-slate-800/60 p-2 rounded-xl border border-white/5">
+              <div className="text-lg font-bold text-purple-400">{wps.length}</div>
+              <div className="text-[9px] text-slate-500">Waypoints</div>
+            </div>
+            <div className="bg-slate-800/60 p-2 rounded-xl border border-white/5">
+              <div className="text-lg font-bold text-indigo-400">{eds.length}</div>
+              <div className="text-[9px] text-slate-500">Edges</div>
+            </div>
+            <div className="bg-slate-800/60 p-2 rounded-xl border border-white/5">
+              <div className="text-lg font-bold text-amber-400">
+                {wps.filter(wp => wp.type === "qr_checkpoint").length}
+              </div>
+              <div className="text-[9px] text-slate-500">QR Codes</div>
+            </div>
+          </div>
+
+          {/* QR List Section */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <div>
+              <h4 className="font-bold text-xs text-slate-300 uppercase tracking-wider mb-2">🏷️ รายการป้าย QR Code</h4>
+              <p className="text-[10px] text-slate-500 mb-3 leading-relaxed">
+                คัดลอกลิงก์ด้านล่างเพื่อนำไปสร้าง QR Code ติดผนังในแต่ละจุดสแกน
+              </p>
+            </div>
+
+            {wps.filter(wp => wp.type === "qr_checkpoint").length === 0 ? (
+              <div className="text-center py-8 px-4 border border-dashed border-white/10 rounded-2xl bg-slate-900/20">
+                <span className="text-2xl block mb-2">🔲</span>
+                <p className="text-xs text-slate-400">ยังไม่มีจุดสแกน QR</p>
+                <p className="text-[10px] text-slate-500 mt-1.5">
+                  เลือกเครื่องมือปักหมุด ดับเบิ้ลคลิกแก้ไขจุด แล้วเปลี่ยนเป็น "จุดสแกน QR"
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {wps.filter(wp => wp.type === "qr_checkpoint").map(wp => {
+                  const prodUrl = `https://actmedia-ar-gamma.vercel.app/ar/navigate?map=${mapId}&point=${wp.id}`;
+                  let sideLabel = "";
+                  if (wp.qrSide === "left") sideLabel = "👈 กำแพงซ้าย";
+                  else if (wp.qrSide === "right") sideLabel = "👉 กำแพงขวา";
+                  else sideLabel = `${wp.headingDeg || 0}° (คัสตอม)`;
+
+                  return (
+                    <div key={wp.id} className="p-3 bg-slate-800/40 rounded-2xl border border-white/5 hover:border-white/10 transition space-y-2 select-text">
+                      <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-2">
+                          <span className="bg-amber-500/20 text-amber-300 text-xs font-black px-2 py-0.5 rounded-lg border border-amber-500/10">
+                            {wp.id}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-bold">{sideLabel}</span>
+                        </div>
+                        <button
+                          onClick={() => handleDownloadQR(prodUrl, wp.id)}
+                          className="p-1 py-0.5 rounded-lg border bg-purple-600 hover:bg-purple-500 border-purple-500 text-white text-[9px] font-bold transition-all shrink-0"
+                          title="ดาวน์โหลดป้าย QR Code"
+                        >
+                          ดาวน์โหลด QR
+                        </button>
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="text-[8px] text-slate-500 uppercase tracking-widest">Production Link (Vercel)</div>
+                        <div className="bg-black/40 rounded-xl p-2 text-[9px] text-slate-300 select-all font-mono break-all leading-normal border border-black/20">
+                          {prodUrl}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1413,7 +1527,7 @@ export default function MapEditorScene({ mode }: { mode?: string } = {}) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-6">
           <div className="bg-slate-800 rounded-2xl w-full max-w-xs p-5 shadow-2xl border border-white/10">
             <h3 className="text-lg font-bold mb-4 text-white font-sans">📍 ตั้งค่าจุด {selWpId}</h3>
-            
+
             <div className="mb-3">
               <label className="block text-xs text-slate-400 mb-1 font-sans">ประเภทจุด</label>
               <select
@@ -1456,11 +1570,10 @@ export default function MapEditorScene({ mode }: { mode?: string } = {}) {
                         const calculatedHeading = calculateHeadingDeg("left");
                         setWpHeading(calculatedHeading.toString());
                       }}
-                      className={`flex-1 py-2 rounded-xl text-xs font-bold border transition ${
-                        qrSideState === "left"
+                      className={`flex-1 py-2 rounded-xl text-xs font-bold border transition ${qrSideState === "left"
                           ? "bg-purple-600/30 border-purple-500 text-purple-300 ring-1 ring-purple-500"
                           : "bg-slate-700 border-slate-600 text-slate-400 hover:bg-slate-600"
-                      }`}
+                        }`}
                     >
                       👈 ฝั่งซ้าย
                     </button>
@@ -1471,11 +1584,10 @@ export default function MapEditorScene({ mode }: { mode?: string } = {}) {
                         const calculatedHeading = calculateHeadingDeg("right");
                         setWpHeading(calculatedHeading.toString());
                       }}
-                      className={`flex-1 py-2 rounded-xl text-xs font-bold border transition ${
-                        qrSideState === "right"
+                      className={`flex-1 py-2 rounded-xl text-xs font-bold border transition ${qrSideState === "right"
                           ? "bg-purple-600/30 border-purple-500 text-purple-300 ring-1 ring-purple-500"
                           : "bg-slate-700 border-slate-600 text-slate-400 hover:bg-slate-600"
-                      }`}
+                        }`}
                     >
                       👉 ฝั่งขวา
                     </button>
@@ -1511,12 +1623,12 @@ export default function MapEditorScene({ mode }: { mode?: string } = {}) {
                   setWps(prev => prev.map(w =>
                     w.id === selWpId
                       ? {
-                          ...w,
-                          label: wpLabel.trim() || `จุดที่ ${parseInt(w.id.slice(1))}`,
-                          type: wpType,
-                          headingDeg: wpType === "qr_checkpoint" ? (parseFloat(wpHeading) || 0) : undefined,
-                          qrSide: wpType === "qr_checkpoint" ? qrSideState : undefined
-                        }
+                        ...w,
+                        label: wpLabel.trim() || `จุดที่ ${parseInt(w.id.slice(1))}`,
+                        type: wpType,
+                        headingDeg: wpType === "qr_checkpoint" ? (parseFloat(wpHeading) || 0) : undefined,
+                        qrSide: wpType === "qr_checkpoint" ? qrSideState : undefined
+                      }
                       : w
                   ));
                   setShowWpModal(false);
@@ -1571,13 +1683,13 @@ export default function MapEditorScene({ mode }: { mode?: string } = {}) {
                 const f2 = e2.from === shared ? e2.to : e2.from;
                 return l.sharedWpId === shared && ((l.wp1Id === f1 && l.wp2Id === f2) || (l.wp1Id === f2 && l.wp2Id === f1));
               }) && (
-                <button
-                  onClick={handleRemoveAngleLock}
-                  className="w-full py-2 bg-red-950/40 hover:bg-red-900/60 text-red-400 border border-red-900/40 rounded-xl text-xs font-semibold transition font-sans mt-1"
-                >
-                  🔓 ลบเงื่อนไขมุมของจุดนี้
-                </button>
-              )}
+                  <button
+                    onClick={handleRemoveAngleLock}
+                    className="w-full py-2 bg-red-950/40 hover:bg-red-900/60 text-red-400 border border-red-900/40 rounded-xl text-xs font-semibold transition font-sans mt-1"
+                  >
+                    🔓 ลบเงื่อนไขมุมของจุดนี้
+                  </button>
+                )}
             </div>
           </div>
         </div>
@@ -1599,10 +1711,10 @@ function ToolBtn({ icon, active, onClick, title, danger }: {
       onClick={onClick}
       title={title}
       className={`p-2 rounded-lg transition ${active
-          ? "bg-purple-600 text-white"
-          : danger
-            ? "text-slate-400 hover:text-red-400 hover:bg-red-500/10"
-            : "text-slate-400 hover:text-white hover:bg-white/10"
+        ? "bg-purple-600 text-white"
+        : danger
+          ? "text-slate-400 hover:text-red-400 hover:bg-red-500/10"
+          : "text-slate-400 hover:text-white hover:bg-white/10"
         }`}
     >
       {icon}
