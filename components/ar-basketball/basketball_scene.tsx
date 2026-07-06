@@ -329,6 +329,33 @@ export default function BasketballScene() {
         </div>
       )}
 
+      {/* ───────── Tutorial ลากขึ้น (Swipe Up Tutorial) ───────── */}
+      {gameState.isHoopPlaced && gameState.status === "idle" && (
+        <div className="absolute inset-0 flex flex-col items-center justify-end pb-32 pointer-events-none z-10">
+          <div className="flex flex-col items-center gap-2">
+            <style>{`
+              @keyframes swipe_up_anim {
+                0% { transform: translateY(40px); opacity: 0; }
+                20% { opacity: 0.8; }
+                80% { transform: translateY(-40px); opacity: 0.2; }
+                100% { transform: translateY(-40px); opacity: 0; }
+              }
+              .animate-swipe-up {
+                animation: swipe_up_anim 2s infinite ease-in-out;
+              }
+            `}</style>
+            <div className="w-16 h-16 animate-swipe-up">
+              <svg viewBox="0 0 24 24" fill="rgba(255,255,255,0.2)" stroke="rgba(255,255,255,0.8)" strokeWidth="1.5" className="w-full h-full">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10.05 4.575a1.5 1.5 0 1 1 2.9 1.05l-1.05 2.9H18.75a1.5 1.5 0 0 1 1.5 1.5V15a6 6 0 0 1-6 6h-2.25a6 6 0 0 1-6-6v-3.75a1.5 1.5 0 0 1 1.5-1.5h.75V5.625a1.5 1.5 0 0 1 1.5-1.5h1.8Z" />
+              </svg>
+            </div>
+            <span className="text-white/80 text-xs font-semibold tracking-wider drop-shadow-md">
+              ลากลูกบาสขึ้นเพื่อชู้ต
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* ───────── ปุ่มควบคุมหลักด้านล่าง ───────── */}
       <div className="absolute bottom-4 left-4 right-4 z-10 flex items-center justify-between pointer-events-auto">
         <button
