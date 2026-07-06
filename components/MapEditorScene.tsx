@@ -19,6 +19,7 @@ interface WP {
   label: string;
   type: "turn" | "destination" | "qr_checkpoint";
   headingDeg?: number;
+  qrSide?: "left" | "right";
 }
 interface Ed { from: string; to: string; meters?: number }
 type Tool = "pan" | "waypoint" | "edge" | "angle" | "eraser";
@@ -54,6 +55,34 @@ function calcAngleDeg(e1: Ed, e2: Ed, sharedId: string, wps: WP[]): number {
   const cross = v1x * v2y - v1y * v2x;
   let deg = Math.atan2(Math.abs(cross), dot) * 180 / Math.PI;
   return deg;
+}
+
+function findParentWp(targetId: string, wpsList: WP[], edsList: Ed[]): string | null {
+  if (wpsList.length === 0 || targetId === wpsList[0].id) return null;
+
+  const startId = wpsList[0].id;
+  const queue: string[] = [startId];
+  const visited = new Set<string>([startId]);
+  const parentMap = new Map<string, string>();
+
+  while (queue.length > 0) {
+    const curr = queue.shift()!;
+    if (curr === targetId) break;
+
+    const neighbors = edsList
+      .filter(e => e.from === curr || e.to === curr)
+      .map(e => e.from === curr ? e.to : e.from);
+
+    for (const n of neighbors) {
+      if (!visited.has(n)) {
+        visited.add(n);
+        parentMap.set(n, curr);
+        queue.push(n);
+      }
+    }
+  }
+
+  return parentMap.get(targetId) || null;
 }
 
 /* ─── Component ──────────────────────────────────────── */
@@ -93,11 +122,15 @@ export default function MapEditorScene({ mode }: { mode?: string } = {}) {
   const [wpLabel, setWpLabel] = useState("");
   const [wpType, setWpType] = useState<"turn" | "destination" | "qr_checkpoint">("turn");
   const [wpHeading, setWpHeading] = useState("0");
+  const [qrSideState, setQrSideState] = useState<"left" | "right" | undefined>(undefined);
 
   // Scale calibration
   const [ppm, setPpm] = useState<number | null>(null); // pixels-per-meter
   const [showDist, setShowDist] = useState(false);
   const [distVal, setDistVal] = useState("");
+
+  // Grid snapping state (default: 50px)
+  const [gridSize, setGridSize] = useState<number | null>(50);
 
   // Camera (x, y = pan offset in screen px, z = zoom)
   const [cam, setCam] = useState({ x: 0, y: 0, z: 1 });
@@ -206,17 +239,19 @@ export default function MapEditorScene({ mode }: { mode?: string } = {}) {
     ctx.scale(cam.z, cam.z);
 
     // Grid
-    const l = -cam.x / cam.z, t2 = -cam.y / cam.z;
-    const r2 = (rect.width - cam.x) / cam.z, b2 = (rect.height - cam.y) / cam.z;
-    ctx.strokeStyle = "rgba(255,255,255,0.04)";
-    ctx.lineWidth = 1 / cam.z;
-    const sx = Math.floor(l / GRID) * GRID;
-    const sy = Math.floor(t2 / GRID) * GRID;
-    for (let x = sx; x <= r2; x += GRID) {
-      ctx.beginPath(); ctx.moveTo(x, t2); ctx.lineTo(x, b2); ctx.stroke();
-    }
-    for (let y = sy; y <= b2; y += GRID) {
-      ctx.beginPath(); ctx.moveTo(l, y); ctx.lineTo(r2, y); ctx.stroke();
+    if (gridSize) {
+      const l = -cam.x / cam.z, t2 = -cam.y / cam.z;
+      const r2 = (rect.width - cam.x) / cam.z, b2 = (rect.height - cam.y) / cam.z;
+      ctx.strokeStyle = "rgba(255,255,255,0.04)";
+      ctx.lineWidth = 1 / cam.z;
+      const sx = Math.floor(l / gridSize) * gridSize;
+      const sy = Math.floor(t2 / gridSize) * gridSize;
+      for (let x = sx; x <= r2; x += gridSize) {
+        ctx.beginPath(); ctx.moveTo(x, t2); ctx.lineTo(x, b2); ctx.stroke();
+      }
+      for (let y = sy; y <= b2; y += gridSize) {
+        ctx.beginPath(); ctx.moveTo(l, y); ctx.lineTo(r2, y); ctx.stroke();
+      }
     }
 
     // Backdrop image (blueprint mode)
@@ -324,14 +359,21 @@ export default function MapEditorScene({ mode }: { mode?: string } = {}) {
 
     // Waypoint preview in waypoint tool (green if hovering on edge, purple if on empty space)
     if (tool === "waypoint" && mousePos) {
-      const hoverWp = hitWP(mousePos.x, mousePos.y);
-      const hoverEd = hitEdge(mousePos.x, mousePos.y);
+      let previewX = mousePos.x;
+      let previewY = mousePos.y;
+      if (gridSize) {
+        previewX = Math.round(previewX / gridSize) * gridSize;
+        previewY = Math.round(previewY / gridSize) * gridSize;
+      }
+
+      const hoverWp = hitWP(previewX, previewY);
+      const hoverEd = hitEdge(previewX, previewY);
       const r = WP_R / cam.z;
 
       if (!hoverWp) {
         ctx.save();
         ctx.beginPath();
-        ctx.arc(mousePos.x, mousePos.y, r, 0, Math.PI * 2);
+        ctx.arc(previewX, previewY, r, 0, Math.PI * 2);
         ctx.fillStyle = hoverEd !== null ? "rgba(34, 197, 94, 0.4)" : "rgba(168, 85, 247, 0.4)";
         ctx.fill();
         ctx.strokeStyle = hoverEd !== null ? "rgba(34, 197, 94, 0.6)" : "rgba(255, 255, 255, 0.4)";
@@ -350,10 +392,66 @@ export default function MapEditorScene({ mode }: { mode?: string } = {}) {
       const isDest = wp.type === "destination";
       const isEraserHover = tool === "eraser" && mousePos && hitWP(mousePos.x, mousePos.y)?.id === wp.id;
 
+      if (isQr) {
+        // หาทิศทางการเดินเพื่อแบ่งซีกวงกลม
+        const parentId = findParentWp(wp.id, wps, eds);
+        let refNode = parentId ? wps.find(w => w.id === parentId) : null;
+        
+        if (!refNode) {
+          const connected = eds.filter(e => e.from === wp.id || e.to === wp.id);
+          if (connected.length > 0) {
+            const neighborId = connected[0].from === wp.id ? connected[0].to : connected[0].from;
+            refNode = wps.find(w => w.id === neighborId) || null;
+          }
+        }
+        
+        let pathAngle = 0;
+        let hasDirection = false;
+        if (refNode) {
+          const vx = wp.px - refNode.px;
+          const vy = wp.py - refNode.py;
+          pathAngle = Math.atan2(vy, vx);
+          hasDirection = true;
+        }
+
+        if (hasDirection) {
+          // วาดฝั่งซ้าย (Left Hemisphere)
+          ctx.beginPath();
+          ctx.arc(wp.px, wp.py, r, pathAngle - Math.PI, pathAngle);
+          ctx.fillStyle = isEraserHover ? "#ef4444" : wp.qrSide === "left" ? "#ef4444" : "#f59e0b";
+          ctx.fill();
+
+          // วาดฝั่งขวา (Right Hemisphere)
+          ctx.beginPath();
+          ctx.arc(wp.px, wp.py, r, pathAngle, pathAngle + Math.PI);
+          ctx.fillStyle = isEraserHover ? "#ef4444" : wp.qrSide === "right" ? "#ef4444" : "#f59e0b";
+          ctx.fill();
+
+          // วาดเส้นแบ่งกลางสีขาวตามแนวเวกเตอร์ทิศทางเดิน
+          ctx.beginPath();
+          ctx.moveTo(wp.px - r * Math.cos(pathAngle), wp.py - r * Math.sin(pathAngle));
+          ctx.lineTo(wp.px + r * Math.cos(pathAngle), wp.py + r * Math.sin(pathAngle));
+          ctx.strokeStyle = "#fff";
+          ctx.lineWidth = 1.5 / cam.z;
+          ctx.stroke();
+        } else {
+          // Fallback ถ้าไม่มีทิศทาง (ปักจุดลอยๆ)
+          ctx.beginPath();
+          ctx.arc(wp.px, wp.py, r, 0, Math.PI * 2);
+          ctx.fillStyle = isEraserHover ? "#ef4444" : "#f59e0b";
+          ctx.fill();
+        }
+      } else {
+        // วาดจุดปกติ (Turn, Destination, START)
+        ctx.beginPath();
+        ctx.arc(wp.px, wp.py, r, 0, Math.PI * 2);
+        ctx.fillStyle = isEraserHover ? "#ef4444" : first ? "#3b82f6" : isDest ? "#ec4899" : "#8b5cf6";
+        ctx.fill();
+      }
+
+      // วาดเส้นขอบวงกลมทับด้านบน
       ctx.beginPath();
       ctx.arc(wp.px, wp.py, r, 0, Math.PI * 2);
-      ctx.fillStyle = isEraserHover ? "#ef4444" : first ? "#3b82f6" : isQr ? "#f59e0b" : isDest ? "#ec4899" : "#8b5cf6";
-      ctx.fill();
       ctx.strokeStyle = isEraserHover ? "#f87171" : isQr ? "#fbbf24" : "#fff";
       ctx.lineWidth = (isEraserHover ? 4 : isQr ? 3 : 2) / cam.z;
       ctx.stroke();
@@ -403,7 +501,7 @@ export default function MapEditorScene({ mode }: { mode?: string } = {}) {
 
     ctx.restore();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wps, eds, cam, bg, selEdge, edgeFrom, ppm, tick, rulerEdges, tool, mousePos, angleLocks]);
+  }, [wps, eds, cam, bg, selEdge, edgeFrom, ppm, tick, rulerEdges, tool, mousePos, angleLocks, gridSize]);
 
   /* ─── Init camera center ───────────────────────────── */
   useEffect(() => {
@@ -443,6 +541,7 @@ export default function MapEditorScene({ mode }: { mode?: string } = {}) {
             label: rawWp.label,
             type: rawWp.type,
             headingDeg: rawWp.headingDeg,
+            qrSide: rawWp.qrSide,
           });
         }
 
@@ -600,6 +699,7 @@ export default function MapEditorScene({ mode }: { mode?: string } = {}) {
         setWpLabel(wp.label);
         setWpType(wp.type || "turn");
         setWpHeading(wp.headingDeg?.toString() || "0");
+        setQrSideState(wp.qrSide);
         setShowWpModal(true);
         return;
       }
@@ -612,10 +712,17 @@ export default function MapEditorScene({ mode }: { mode?: string } = {}) {
         const newId = `W${nextIdRef.current}`;
         nextIdRef.current++;
 
+        let px = w.x;
+        let py = w.y;
+        if (gridSize) {
+          px = Math.round(px / gridSize) * gridSize;
+          py = Math.round(py / gridSize) * gridSize;
+        }
+
         const newWp: WP = {
           id: newId,
-          px: w.x,
-          py: w.y,
+          px,
+          py,
           label: `จุดที่ ${parseInt(newId.slice(1))}`,
           type: "turn"
         };
@@ -766,10 +873,17 @@ export default function MapEditorScene({ mode }: { mode?: string } = {}) {
         const id = `W${nextIdRef.current}`;
         nextIdRef.current++;
         pushHist();
+        let px = w.x;
+        let py = w.y;
+        if (gridSize) {
+          px = Math.round(px / gridSize) * gridSize;
+          py = Math.round(py / gridSize) * gridSize;
+        }
+
         setWps(prev => [...prev, {
           id,
-          px: w.x,
-          py: w.y,
+          px,
+          py,
           label: `จุดที่ ${parseInt(id.slice(1))}`,
           type: "turn"
         }]);
@@ -891,7 +1005,7 @@ export default function MapEditorScene({ mode }: { mode?: string } = {}) {
         z: Number(((wp.py - w1.py) / ppm!).toFixed(3)),
         label: wp.label,
         type: wp.type || "turn",
-        ...(wp.type === "qr_checkpoint" ? { headingDeg: wp.headingDeg || 0 } : {})
+        ...(wp.type === "qr_checkpoint" ? { headingDeg: wp.headingDeg || 0, qrSide: wp.qrSide } : {})
       };
     });
 
@@ -1039,6 +1153,41 @@ export default function MapEditorScene({ mode }: { mode?: string } = {}) {
     }
   };
 
+  const calculateHeadingDeg = (side: "left" | "right") => {
+    if (!selWpId) return 0;
+    
+    const qrWp = wps.find(w => w.id === selWpId);
+    if (!qrWp) return 0;
+    
+    const parentId = findParentWp(selWpId, wps, eds);
+    let refNode = parentId ? wps.find(w => w.id === parentId) : null;
+    
+    if (!refNode) {
+      const connected = eds.filter(e => e.from === selWpId || e.to === selWpId);
+      if (connected.length > 0) {
+        const neighborId = connected[0].from === selWpId ? connected[0].to : connected[0].from;
+        refNode = wps.find(w => w.id === neighborId) || null;
+      }
+    }
+    
+    if (!refNode) return 0;
+    
+    const vx = qrWp.px - refNode.px;
+    const vy = qrWp.py - refNode.py;
+    const pathAngle = Math.atan2(vy, vx);
+    
+    let headingRad = pathAngle;
+    if (side === "left") {
+      headingRad = pathAngle - Math.PI / 2;
+    } else {
+      headingRad = pathAngle + Math.PI / 2;
+    }
+    
+    let deg = (headingRad * 180 / Math.PI) % 360;
+    if (deg < 0) deg += 360;
+    return Math.round(deg);
+  };
+
   /* ─── JSX ──────────────────────────────────────────── */
   return (
     <div className="h-screen w-screen flex flex-col bg-slate-950 text-white select-none">
@@ -1056,6 +1205,24 @@ export default function MapEditorScene({ mode }: { mode?: string } = {}) {
         </span>
 
         <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 bg-slate-800 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-300">
+            <span>🌐 Grid:</span>
+            <select
+              value={gridSize || "none"}
+              onChange={e => {
+                const val = e.target.value;
+                setGridSize(val === "none" ? null : parseInt(val));
+              }}
+              className="bg-transparent text-white outline-none border-none cursor-pointer pr-1 font-bold"
+            >
+              <option value="10" className="bg-slate-800">10px</option>
+              <option value="20" className="bg-slate-800">20px</option>
+              <option value="50" className="bg-slate-800">50px (แนะนำ)</option>
+              <option value="100" className="bg-slate-800">100px</option>
+              <option value="none" className="bg-slate-800">No Grid</option>
+            </select>
+          </div>
+
           <label className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 rounded-lg text-xs font-semibold cursor-pointer transition">
             <Upload size={14} /> อัปโหลดแปลน
             <input type="file" accept=".pdf,image/*" className="hidden" onChange={handleUpload} />
@@ -1278,18 +1445,59 @@ export default function MapEditorScene({ mode }: { mode?: string } = {}) {
             </div>
 
             {wpType === "qr_checkpoint" && (
-              <div className="mb-4">
-                <label className="block text-xs text-slate-400 mb-1 font-sans">ทิศทางเริ่มต้นของป้าย (องศา 0-360)</label>
-                <input
-                  type="number"
-                  min="0"
-                  max="360"
-                  value={wpHeading}
-                  onChange={e => setWpHeading(e.target.value)}
-                  placeholder="เช่น 90"
-                  style={{ boxSizing: "border-box" }}
-                  className="w-full bg-slate-700 text-white rounded-xl px-3 py-2 text-sm outline-none border border-slate-600 focus:border-purple-500 font-mono"
-                />
+              <div className="mb-4 space-y-3">
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1 font-sans">ฝั่งกำแพงที่ติดป้าย QR</label>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setQrSideState("left");
+                        const calculatedHeading = calculateHeadingDeg("left");
+                        setWpHeading(calculatedHeading.toString());
+                      }}
+                      className={`flex-1 py-2 rounded-xl text-xs font-bold border transition ${
+                        qrSideState === "left"
+                          ? "bg-purple-600/30 border-purple-500 text-purple-300 ring-1 ring-purple-500"
+                          : "bg-slate-700 border-slate-600 text-slate-400 hover:bg-slate-600"
+                      }`}
+                    >
+                      👈 ฝั่งซ้าย
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setQrSideState("right");
+                        const calculatedHeading = calculateHeadingDeg("right");
+                        setWpHeading(calculatedHeading.toString());
+                      }}
+                      className={`flex-1 py-2 rounded-xl text-xs font-bold border transition ${
+                        qrSideState === "right"
+                          ? "bg-purple-600/30 border-purple-500 text-purple-300 ring-1 ring-purple-500"
+                          : "bg-slate-700 border-slate-600 text-slate-400 hover:bg-slate-600"
+                      }`}
+                    >
+                      👉 ฝั่งขวา
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1 font-sans">ทิศทางการหันป้าย (คำนวณให้อัตโนมัติ: องศา 0-360)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="360"
+                    value={wpHeading}
+                    onChange={e => {
+                      setWpHeading(e.target.value);
+                      setQrSideState(undefined);
+                    }}
+                    placeholder="เช่น 90"
+                    style={{ boxSizing: "border-box" }}
+                    className="w-full bg-slate-700 text-white rounded-xl px-3 py-2 text-sm outline-none border border-slate-600 focus:border-purple-500 font-mono"
+                  />
+                </div>
               </div>
             )}
 
@@ -1306,7 +1514,8 @@ export default function MapEditorScene({ mode }: { mode?: string } = {}) {
                           ...w,
                           label: wpLabel.trim() || `จุดที่ ${parseInt(w.id.slice(1))}`,
                           type: wpType,
-                          headingDeg: wpType === "qr_checkpoint" ? (parseFloat(wpHeading) || 0) : undefined
+                          headingDeg: wpType === "qr_checkpoint" ? (parseFloat(wpHeading) || 0) : undefined,
+                          qrSide: wpType === "qr_checkpoint" ? qrSideState : undefined
                         }
                       : w
                   ));
