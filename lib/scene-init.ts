@@ -18,6 +18,7 @@ export const initScenePipelineModule = (storeData: StoreData | null) => {
   let last_provider_pos = new THREE.Vector3(0, 0, 0);
   let prev_waypoint_pos = new THREE.Vector3(0, 0, 0);
   let is_segment_initialized = false;
+  let prev_dist = Infinity; // ponytail: for closest-approach detection instead of raw radius trigger
 
   const initXrScene = ({ scene, camera, renderer }: any) => {
     renderer.shadowMap.enabled = true;
@@ -101,6 +102,7 @@ export const initScenePipelineModule = (storeData: StoreData | null) => {
           currentWaypointIndex = 1;
           isArrived = false;
           is_segment_initialized = false;
+          prev_dist = Infinity;
         }
       }
 
@@ -147,10 +149,17 @@ export const initScenePipelineModule = (storeData: StoreData | null) => {
 
           const proximity_radius = storeData?.proximity_radius_m || 1.5;
 
-          if (dist < proximity_radius) {
+          // ponytail: closest-approach — trigger only after user passes the waypoint
+          // (dist was shrinking, now growing again while still inside radius)
+          // ceiling: won't trigger if user walks parallel and never enters radius
+          const is_receding = dist > prev_dist;
+          prev_dist = dist;
+
+          if (dist < proximity_radius && is_receding) {
+            prev_dist = Infinity; // reset for next waypoint
             if (currentWaypointIndex < currentPath.length - 1) {
               currentWaypointIndex++;
-              is_segment_initialized = false; // Trigger re-init for the next segment
+              is_segment_initialized = false;
             } else {
               isArrived = true;
               if (positionProvider.nav_debug) positionProvider.nav_debug.isArrived = true;
