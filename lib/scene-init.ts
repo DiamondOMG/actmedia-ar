@@ -21,6 +21,8 @@ export const initScenePipelineModule = (storeData: StoreData | null) => {
   // ponytail: turn-zone state machine — advance arrow on entry, segment-reset on exit
   // ceiling: assumes waypoints are spaced > 2×radius apart
   let in_turn_zone = false;
+  // ponytail: continuous heading correction every 1m during straight walks
+  let last_correction_pos = new THREE.Vector3(0, 0, 0);
 
   const initXrScene = ({ scene, camera, renderer }: any) => {
     renderer.shadowMap.enabled = true;
@@ -126,6 +128,7 @@ export const initScenePipelineModule = (storeData: StoreData | null) => {
             }
             last_provider_pos.copy(provider_pos);
             is_segment_initialized = true;
+            last_correction_pos.copy(prev_waypoint_pos);
           }
 
           // Calculate delta movement from the last waypoint using calibrated coords
@@ -154,6 +157,34 @@ export const initScenePipelineModule = (storeData: StoreData | null) => {
               isArrived,
               inTurnZone: false
             };
+
+            // ponytail: continuous heading correction — ทุก 1m เทียบทิศเดินจริง vs ทิศจากแผนที่
+            // ceiling: assumes user walks roughly toward the next waypoint
+            const walk_dist = Math.sqrt(
+              (adjusted_user_pos.x - last_correction_pos.x) ** 2 +
+              (adjusted_user_pos.z - last_correction_pos.z) ** 2
+            );
+            if (walk_dist > 1.0) {
+              const prev_wp = storeData?.waypoints[currentPath[currentWaypointIndex - 1]];
+              if (prev_wp) {
+                const actual_angle = Math.atan2(
+                  adjusted_user_pos.x - prev_wp.x,
+                  adjusted_user_pos.z - prev_wp.z
+                );
+                const expected_angle = Math.atan2(
+                  targetWaypoint.x - prev_wp.x,
+                  targetWaypoint.z - prev_wp.z
+                );
+                let correction = expected_angle - actual_angle;
+                while (correction > Math.PI) correction -= 2 * Math.PI;
+                while (correction < -Math.PI) correction += 2 * Math.PI;
+                // guard: < 15° only — ถ้ามุมมากแปลว่า user เดินเฉียงจริงๆ ไม่ใช่ drift
+                if (Math.abs(correction) < Math.PI / 12) {
+                  positionProvider.headingOffsetRad += correction;
+                }
+              }
+              last_correction_pos.copy(adjusted_user_pos);
+            }
 
             // เข้ารัศมี → advance ลูกศรไปจุดถัดไปทันที + เข้า turn zone
             if (dist < proximity_radius) {
