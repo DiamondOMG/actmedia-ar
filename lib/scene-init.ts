@@ -18,7 +18,9 @@ export const initScenePipelineModule = (storeData: StoreData | null) => {
   let last_provider_pos = new THREE.Vector3(0, 0, 0);
   let prev_waypoint_pos = new THREE.Vector3(0, 0, 0);
   let is_segment_initialized = false;
-  let prev_dist = Infinity; // ponytail: for closest-approach detection instead of raw radius trigger
+  // ponytail: turn-zone state machine — advance arrow on entry, segment-reset on exit
+  // ceiling: assumes waypoints are spaced > 2×radius apart
+  let in_turn_zone = false;
 
   const initXrScene = ({ scene, camera, renderer }: any) => {
     renderer.shadowMap.enabled = true;
@@ -102,7 +104,7 @@ export const initScenePipelineModule = (storeData: StoreData | null) => {
           currentWaypointIndex = 1;
           isArrived = false;
           is_segment_initialized = false;
-          prev_dist = Infinity;
+          in_turn_zone = false;
         }
       }
 
@@ -133,36 +135,91 @@ export const initScenePipelineModule = (storeData: StoreData | null) => {
           const adjusted_user_pos = new THREE.Vector3().addVectors(prev_waypoint_pos, delta_pos);
 
           navArrow.updatePosition(camera.position, camera.quaternion);
-          navArrow.setTarget(adjusted_user_pos, targetWaypoint);
 
           const dist = getDistance(
             { x: adjusted_user_pos.x, z: adjusted_user_pos.z, label: '' },
             targetWaypoint
           );
 
-          positionProvider.nav_debug = {
-            targetId: currentTargetId,
-            targetPos: `(${targetWaypoint.x}, ${targetWaypoint.z})`,
-            distance: dist.toFixed(2),
-            isArrived
-          };
-
           const proximity_radius = storeData?.proximity_radius_m || 1.5;
 
-          // ponytail: closest-approach — trigger only after user passes the waypoint
-          // (dist was shrinking, now growing again while still inside radius)
-          // ceiling: won't trigger if user walks parallel and never enters radius
-          const is_receding = dist > prev_dist;
-          prev_dist = dist;
+          if (!in_turn_zone) {
+            // ── NORMAL MODE: ชี้ไป waypoint ปัจจุบัน, แสดงระยะ ──
+            navArrow.setTarget(adjusted_user_pos, targetWaypoint);
 
-          if (dist < proximity_radius && is_receding) {
-            prev_dist = Infinity; // reset for next waypoint
-            if (currentWaypointIndex < currentPath.length - 1) {
-              currentWaypointIndex++;
-              is_segment_initialized = false;
-            } else {
-              isArrived = true;
-              if (positionProvider.nav_debug) positionProvider.nav_debug.isArrived = true;
+            positionProvider.nav_debug = {
+              targetId: currentTargetId,
+              targetPos: `(${targetWaypoint.x}, ${targetWaypoint.z})`,
+              distance: dist.toFixed(2),
+              isArrived,
+              inTurnZone: false
+            };
+
+            // เข้ารัศมี → advance ลูกศรไปจุดถัดไปทันที + เข้า turn zone
+            if (dist < proximity_radius) {
+              if (currentWaypointIndex < currentPath.length - 1) {
+                currentWaypointIndex++;
+                in_turn_zone = true;
+                // ลูกศรชี้ไปจุดถัดไปทันที
+                const nextWp = storeData?.waypoints[currentPath[currentWaypointIndex]];
+                if (nextWp) navArrow.setTarget(adjusted_user_pos, nextWp);
+                positionProvider.nav_debug = {
+                  targetId: currentPath[currentWaypointIndex],
+                  targetPos: nextWp ? `(${nextWp.x}, ${nextWp.z})` : '',
+                  distance: '',
+                  isArrived: false,
+                  inTurnZone: true
+                };
+              } else {
+                isArrived = true;
+                positionProvider.nav_debug = { ...positionProvider.nav_debug, isArrived: true };
+              }
+            }
+          } else {
+            // ── TURN ZONE: ลูกศรชี้จุดถัดไปอยู่แล้ว, ซ่อนระยะ ──
+            const turnTargetWp = storeData?.waypoints[currentPath[currentWaypointIndex]];
+            if (turnTargetWp) navArrow.setTarget(adjusted_user_pos, turnTargetWp);
+
+            // วัดระยะจาก waypoint ที่เพิ่งผ่าน (ตัวก่อน currentWaypointIndex)
+            const passedWp = storeData?.waypoints[currentPath[currentWaypointIndex - 1]];
+            const dist_from_passed = passedWp ? getDistance(
+              { x: adjusted_user_pos.x, z: adjusted_user_pos.z, label: '' },
+              passedWp
+            ) : 0;
+
+            positionProvider.nav_debug = {
+              targetId: currentPath[currentWaypointIndex],
+              targetPos: turnTargetWp ? `(${turnTargetWp.x}, ${turnTargetWp.z})` : '',
+              distance: '',
+              isArrived: false,
+              inTurnZone: true
+            };
+
+            // ออกจากรัศมี (เดินตรงไป 1.5m จากจุดเลี้ยว) → segment reset + heading correction
+            if (dist_from_passed > proximity_radius) {
+              // ponytail: heading drift correction — ใช้ทิศเดินตรงของ user เทียบกับทิศจากแผนที่
+              // ceiling: assumes user walks straight after turning; noisy if they zigzag
+              if (passedWp && turnTargetWp) {
+                const actual_angle = Math.atan2(
+                  adjusted_user_pos.x - passedWp.x,
+                  adjusted_user_pos.z - passedWp.z
+                );
+                const expected_angle = Math.atan2(
+                  turnTargetWp.x - passedWp.x,
+                  turnTargetWp.z - passedWp.z
+                );
+                let correction = expected_angle - actual_angle;
+                // normalize to [-π, π]
+                while (correction > Math.PI) correction -= 2 * Math.PI;
+                while (correction < -Math.PI) correction += 2 * Math.PI;
+                // guard: ignore if > 30° (likely bad data, not drift)
+                if (Math.abs(correction) < Math.PI / 6) {
+                  positionProvider.headingOffsetRad += correction;
+                }
+              }
+
+              in_turn_zone = false;
+              is_segment_initialized = false; // trigger segment reset ชดเชย position drift
             }
           }
 

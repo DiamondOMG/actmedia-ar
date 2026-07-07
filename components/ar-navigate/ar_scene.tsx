@@ -193,7 +193,7 @@ export default function ARScene() {
                   <div className="text-[9px] uppercase tracking-widest text-purple-300 font-bold">{storeData.store_name}</div>
                   <div className="text-white font-bold text-sm truncate">{selectedTarget.name}</div>
                 </div>
-                {navInfo && !navInfo.isArrived && (
+                {navInfo && !navInfo.isArrived && !navInfo.inTurnZone && (
                   <div className="text-right shrink-0 pl-2 border-l border-white/10">
                     <div className="text-[9px] text-slate-400 uppercase">ระยะทาง</div>
                     <div className="text-xl font-black text-white leading-tight">{navInfo.distance}<span className="text-[10px] font-normal text-slate-300 ml-0.5">ม.</span></div>
