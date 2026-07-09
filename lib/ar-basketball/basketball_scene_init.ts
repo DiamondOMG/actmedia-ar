@@ -36,44 +36,28 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
   let hasScoredThisThrow = false;
   let canScore = false; // ตรวจสอบว่าผ่านห่วงจากบนลงล่างเท่านั้น
 
-  // ponytail: store screen pixels only from touch events, project to 3D in onUpdate with same-frame camera
+  // ponytail: camera-attached dragging states for zero AR latency jitter
   let isDragging = false;
+  const startLocalPos = new THREE.Vector3();
+  const currentLocalPos = new THREE.Vector3();
+  const expectedVelocity = new THREE.Vector3();
   let startScreenX = 0;
   let startScreenY = 0;
   let dragScreenX = 0;
   let dragScreenY = 0;
-  const expectedVelocity = new THREE.Vector3();
 
-  // DEBUG: ตัวแปรชั่วคราวสำหรับตรวจสอบ jitter (ลบทิ้งทีหลัง)
-  const prevBallPos = new THREE.Vector3();
-  const prevCamPos = new THREE.Vector3();
-  const prevCamQuat = new THREE.Quaternion();
-  let debugDiv: HTMLDivElement | null = null;
-  let debugFrameCount = 0;
-
-  const getProjectedPosition = (clientX: number, clientY: number, activeCamera: THREE.Camera): THREE.Vector3 => {
+  const getLocalProjectedPosition = (clientX: number, clientY: number, activeCamera: THREE.Camera): THREE.Vector3 => {
     const ndc = new THREE.Vector2(
       (clientX / window.innerWidth) * 2 - 1,
       -(clientY / window.innerHeight) * 2 + 1
     );
-
-    const normal = new THREE.Vector3(0, 0, 1).applyQuaternion(activeCamera.quaternion);
-    const coplanarPoint = new THREE.Vector3(0, -0.15, -0.4).applyQuaternion(activeCamera.quaternion).add(activeCamera.position);
-
-    const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, coplanarPoint);
-    const raycaster = new THREE.Raycaster();
-    raycaster.setFromCamera(ndc, activeCamera);
-
-    const targetPos = new THREE.Vector3();
-    raycaster.ray.intersectPlane(plane, targetPos);
-    return targetPos;
+    const rayDir = new THREE.Vector3(ndc.x, ndc.y, -1).applyMatrix4(activeCamera.projectionMatrixInverse).normalize();
+    const t = -0.4 / rayDir.z;
+    return rayDir.multiplyScalar(t);
   };
 
-  // คำนวณเวกเตอร์ความเร็วจาก displacement ระหว่างจุดเริ่มต้นและจุดปัจจุบัน (รับ world pos ที่ project แล้วในเฟรมเดียวกัน)
-  const calculateExpectedVelocity = (startWorldPos: THREE.Vector3, currentWorldPos: THREE.Vector3, activeCamera: THREE.Camera) => {
-    const deltaWorld = new THREE.Vector3().subVectors(currentWorldPos, startWorldPos);
-    const deltaLocal = deltaWorld.clone().applyQuaternion(activeCamera.quaternion.clone().invert());
-
+  const calculateExpectedVelocity = (activeCamera: THREE.Camera) => {
+    const deltaLocal = new THREE.Vector3().subVectors(currentLocalPos, startLocalPos);
     const maxDrag = 0.25;
     const dy = Math.max(0.0, deltaLocal.y);
     const ratio = Math.min(dy / maxDrag, 1.0);
@@ -301,8 +285,10 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
       return;
     }
 
-    if (ballMesh && scene) {
-      scene.remove(ballMesh);
+    if (ballMesh) {
+      if (ballMesh.parent) {
+        ballMesh.parent.remove(ballMesh);
+      }
     }
 
     isBallThrown = false;
@@ -311,7 +297,15 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
     ballVelocity.set(0, 0, 0);
 
     ballMesh = createBasketballMesh();
-    scene.add(ballMesh);
+    
+    const { camera } = XR8.Threejs.xrScene();
+    if (camera) {
+      camera.add(ballMesh);
+      ballMesh.position.set(0, -0.15, -0.4);
+      ballMesh.rotation.set(0, 0, 0);
+    } else {
+      scene.add(ballMesh);
+    }
 
     onStateChange({ status: 'idle', ballsLeft, currentRound });
   };
@@ -525,13 +519,22 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
         onStateChange({ status: 'thrown' });
       };
 
-      // ฟังก์ชันลากบอลแบบใหม่ (เก็บแค่พิกัดหน้าจอ, project ใน onUpdate)
+      // ฟังก์ชันลากบอลแบบใหม่ (ใช้พิกัดกล้อง Local 100% ป้องกันสั่น)
       (window as any).startDragging = (clientX: number, clientY: number) => {
+        const { camera: activeCamera } = XR8.Threejs.xrScene();
+        if (!activeCamera || !ballMesh) return;
+
         isDragging = true;
         startScreenX = clientX;
         startScreenY = clientY;
         dragScreenX = clientX;
         dragScreenY = clientY;
+
+        const localPos = getLocalProjectedPosition(clientX, clientY, activeCamera);
+        startLocalPos.copy(localPos);
+        currentLocalPos.copy(localPos);
+        ballMesh.position.copy(localPos);
+
         expectedVelocity.set(0, 0, 0);
       };
 
@@ -545,13 +548,22 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
         trajectoryPoints.forEach(p => { p.visible = false; });
 
         const { camera: activeCamera } = XR8.Threejs.xrScene();
-        if (!activeCamera || isBallThrown || ballsLeft <= 0 || !isHoopPlaced) return;
+        if (!activeCamera || isBallThrown || ballsLeft <= 0 || !isHoopPlaced || !ballMesh) return;
 
-        // project ครั้งสุดท้ายด้วยกล้องปัจจุบัน
-        const startWorld = getProjectedPosition(startScreenX, startScreenY, activeCamera);
-        const currentWorld = getProjectedPosition(clientX, clientY, activeCamera);
-        calculateExpectedVelocity(startWorld, currentWorld, activeCamera);
+        const localPos = getLocalProjectedPosition(clientX, clientY, activeCamera);
+        currentLocalPos.copy(localPos);
+        calculateExpectedVelocity(activeCamera);
 
+        // ย้ายบอลจาก Camera เข้า Scene หลักก่อนยิง
+        const worldPos = new THREE.Vector3();
+        ballMesh.getWorldPosition(worldPos);
+        
+        if (ballMesh.parent) {
+          ballMesh.parent.remove(ballMesh);
+        }
+        scene.add(ballMesh);
+
+        ballMesh.position.copy(worldPos);
         ballVelocity.copy(expectedVelocity);
         isBallThrown = true;
         onStateChange({ status: 'thrown' });
@@ -705,51 +717,15 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
         }
       } else {
         if (isDragging) {
-          // project พิกัดหน้าจอเป็น 3D ในเฟรมเดียวกับ render (ไม่มี cross-frame jitter)
-          const currentWorld = getProjectedPosition(dragScreenX, dragScreenY, camera);
-          ballMesh.position.copy(currentWorld);
+          // อัปเดตตำแหน่งลูกบอลแบบ Local บนกล้องโดยตรง ทำให้ไม่มีวันสั่นไหว
+          const localPos = getLocalProjectedPosition(dragScreenX, dragScreenY, camera);
+          currentLocalPos.copy(localPos);
+          ballMesh.position.copy(currentLocalPos);
 
-          // คำนวณ velocity จาก displacement ในเฟรมเดียวกัน
-          const startWorld = getProjectedPosition(startScreenX, startScreenY, camera);
-          calculateExpectedVelocity(startWorld, currentWorld, camera);
-
-          // DEBUG: สร้าง overlay ครั้งแรก
-          if (!debugDiv) {
-            debugDiv = document.createElement('div');
-            debugDiv.id = 'debug-jitter-log';
-            debugDiv.style.cssText = 'position:fixed;bottom:60px;left:4px;right:4px;z-index:9999;background:rgba(0,0,0,0.85);color:#0f0;font:10px/1.4 monospace;padding:8px;border-radius:8px;pointer-events:none;max-height:40vh;overflow:hidden;';
-            document.body.appendChild(debugDiv);
-          }
-
-          debugFrameCount++;
-          if (debugFrameCount % 5 === 0) {
-            const ballDelta = ballMesh.position.distanceTo(prevBallPos);
-            const camPosDelta = camera.position.distanceTo(prevCamPos);
-            const camRotDelta = camera.quaternion.angleTo(prevCamQuat) * (180 / Math.PI);
-
-            debugDiv.innerHTML = [
-              `<b style="color:#ff0">⚠ JITTER DEBUG v2</b>`,
-              `screen:   (${dragScreenX.toFixed(0)}, ${dragScreenY.toFixed(0)})`,
-              `ballΔpos: <b>${(ballDelta * 1000).toFixed(2)}mm</b>`,
-              `camΔpos:  <b>${(camPosDelta * 1000).toFixed(2)}mm</b>`,
-              `camΔrot:  <b>${camRotDelta.toFixed(3)}°</b>`,
-              `ballPos:  (${ballMesh.position.x.toFixed(4)}, ${ballMesh.position.y.toFixed(4)}, ${ballMesh.position.z.toFixed(4)})`,
-            ].join('<br>');
-
-            prevBallPos.copy(ballMesh.position);
-            prevCamPos.copy(camera.position);
-            prevCamQuat.copy(camera.quaternion);
-          }
+          calculateExpectedVelocity(camera);
         } else {
-          // DEBUG: ซ่อน overlay เมื่อไม่ได้ลาก
-          if (debugDiv) {
-            debugDiv.remove();
-            debugDiv = null;
-          }
-          // ซิงก์ตำแหน่งลูกบอลให้อยู่ติดกับกล้อง
-          const offset = new THREE.Vector3(0, -0.15, -0.4);
-          offset.applyQuaternion(camera.quaternion);
-          ballMesh.position.copy(camera.position).add(offset);
+          // ซิงก์ตำแหน่งลูกบอลให้อยู่ติดกับกล้องแบบ Local ตรงๆ
+          ballMesh.position.set(0, -0.15, -0.4);
         }
 
         // หมุนลูกบอลช้าๆ ขณะรอการชู้ตเพื่อความสมจริง
@@ -761,7 +737,8 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
           const maxPoints = 20;
           const simDt = 0.065; // ระยะเวลาในการจำลองแต่ละจุดเพื่อให้วิถีโค้งกำลังดี
 
-          const tempPos = new THREE.Vector3().copy(ballMesh.position);
+          const tempPos = new THREE.Vector3();
+          ballMesh.getWorldPosition(tempPos);
           const tempVel = new THREE.Vector3().copy(expectedVelocity);
           let activeCount = 0;
 
