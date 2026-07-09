@@ -327,7 +327,7 @@ export default function BasketballScene() {
             </div>
 
             <div className="text-[10px] text-slate-500 font-mono text-center">
-              AR Basketball Mode Selector v2.2
+              AR Basketball Mode Selector v2.3
             </div>
           </div>
           <div className="flex-1" onClick={() => setIsMenuOpen(false)}></div>
@@ -360,12 +360,12 @@ export default function BasketballScene() {
           </div>
 
           <div className="flex flex-col items-end gap-1.5">
-            {/* โหมดจำกัดเวลา (multi และ fade): แสดงเวลาถอยหลัง 60 วินาทีรวม */}
+            {/* โหมดจำกัดเวลา (multi และ fade): แสดงเวลาถอยหลัง 60 วินาทีรวม (ปัดเศษขึ้น Math.ceil ป้องกันทศนิยม) */}
             {isTimedMode && (
               <div className="rounded-xl bg-red-600/80 border border-red-500/30 px-3 py-1.5 text-white font-mono text-xs flex items-center gap-1.5 shadow-lg">
                 <Timer className="h-3.5 w-3.5 animate-spin" />
                 <span className="font-black text-sm">
-                  {gameState.timeLeft !== undefined ? gameState.timeLeft : "60"}s
+                  {gameState.timeLeft !== undefined ? Math.max(0, Math.ceil(gameState.timeLeft)) : "60"}s
                 </span>
               </div>
             )}
@@ -396,7 +396,7 @@ export default function BasketballScene() {
                 <div className="bg-[#0c0c0c] border border-[#222] rounded-lg px-2.5 py-1">
                   <span className="text-red-500 font-mono text-xs font-bold tracking-widest drop-shadow-[0_0_4px_rgba(239,68,68,0.9)]">
                     {isTimedMode 
-                      ? `00:${String(gameState.timeLeft || 0).padStart(2, "0")}`
+                      ? `00:${String(Math.max(0, Math.ceil(gameState.timeLeft || 0))).padStart(2, "0")}`
                       : "01:00"
                     }
                   </span>

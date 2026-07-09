@@ -349,7 +349,7 @@ export const initBasketballScenePipelineModule = (initialMode: GameMode, onState
         currentRound: round,
         ballsLeft,
         gameMode,
-        timeLeft
+        timeLeft: Math.max(0, Math.ceil(timeLeft))
       });
       return;
     }
@@ -407,7 +407,7 @@ export const initBasketballScenePipelineModule = (initialMode: GameMode, onState
       currentRound: round,
       ballsLeft,
       gameMode,
-      timeLeft,
+      timeLeft: Math.max(0, Math.ceil(timeLeft)),
       windSpeed,
       windDirection
     });
@@ -457,7 +457,7 @@ export const initBasketballScenePipelineModule = (initialMode: GameMode, onState
       ballsLeft: isTimedMode ? 999 : ballsLeft, 
       currentRound,
       gameMode,
-      timeLeft,
+      timeLeft: Math.max(0, Math.ceil(timeLeft)),
       combo
     });
   };
@@ -579,7 +579,7 @@ export const initBasketballScenePipelineModule = (initialMode: GameMode, onState
     onStateChange({ 
       score, 
       status: 'scored',
-      timeLeft,
+      timeLeft: Math.max(0, Math.ceil(timeLeft)),
       activeHoopMultiplier: multiplier
     });
 
@@ -910,7 +910,7 @@ export const initBasketballScenePipelineModule = (initialMode: GameMode, onState
             }
           }
 
-          // นับถอยหลัง 60 วินาทีรวมของโหมดแวบหายด้วย
+          // นับถอยหลัง 60 วินาทีรวมของโหมดแวบหายด้วย (ปัดเศษจำนวนเต็มเป็นวินาทีเสมอก่อนส่ง)
           timeLeft -= dt;
           onStateChange({ timeLeft: Math.max(0, Math.ceil(timeLeft)) });
           
