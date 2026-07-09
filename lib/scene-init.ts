@@ -211,11 +211,10 @@ export const initScenePipelineModule = (storeData: StoreData | null) => {
             const turnTargetWp = storeData?.waypoints[currentPath[currentWaypointIndex]];
             if (turnTargetWp) navArrow.setTarget(adjusted_user_pos, turnTargetWp);
 
-            // วัดระยะจาก waypoint ที่เพิ่งผ่าน (ตัวก่อน currentWaypointIndex)
-            const passedWp = storeData?.waypoints[currentPath[currentWaypointIndex - 1]];
-            const dist_from_passed = passedWp ? getDistance(
-              { x: adjusted_user_pos.x, z: adjusted_user_pos.z, label: '' },
-              passedWp
+            // วัดระยะจาก waypoint ที่เพิ่งผ่าน
+            const passed = storeData?.waypoints[currentPath[currentWaypointIndex - 1]];
+            const dist_from_passed = passed ? getDistance(
+              { x: adjusted_user_pos.x, z: adjusted_user_pos.z, label: '' }, passed
             ) : 0;
 
             positionProvider.nav_debug = {
@@ -226,31 +225,11 @@ export const initScenePipelineModule = (storeData: StoreData | null) => {
               inTurnZone: true
             };
 
-            // ออกจากรัศมี (เดินตรงไป 1.5m จากจุดเลี้ยว) → segment reset + heading correction
+            // ponytail: exit on radius only — no heading snap here
+            // ceiling: relies on normal-mode continuous correction (15° guard) to recalibrate once user walks toward target
             if (dist_from_passed > proximity_radius) {
-              // ponytail: heading drift correction — ใช้ทิศเดินตรงของ user เทียบกับทิศจากแผนที่
-              // ceiling: assumes user walks straight after turning; noisy if they zigzag
-              if (passedWp && turnTargetWp) {
-                const actual_angle = Math.atan2(
-                  adjusted_user_pos.x - passedWp.x,
-                  adjusted_user_pos.z - passedWp.z
-                );
-                const expected_angle = Math.atan2(
-                  turnTargetWp.x - passedWp.x,
-                  turnTargetWp.z - passedWp.z
-                );
-                let correction = expected_angle - actual_angle;
-                // normalize to [-π, π]
-                while (correction > Math.PI) correction -= 2 * Math.PI;
-                while (correction < -Math.PI) correction += 2 * Math.PI;
-                // guard: ignore if > 30° (likely bad data, not drift)
-                if (Math.abs(correction) < Math.PI / 6) {
-                  positionProvider.headingOffsetRad += correction;
-                }
-              }
-
               in_turn_zone = false;
-              is_segment_initialized = false; // trigger segment reset ชดเชย position drift
+              is_segment_initialized = false;
             }
           }
 
