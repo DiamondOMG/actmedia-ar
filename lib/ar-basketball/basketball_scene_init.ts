@@ -80,7 +80,6 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
   const ballModelScale = 0.083; // สเกลลูกใหม่สัมพันธ์กับขนาดรัศมี
   const ringRadius = 0.28;
   const gravity = 9.81;
-  const floorY = 0.50; // ระดับพื้นเสมือนสูงจากพื้นดินจริง (เมตร) เพื่อไม่ให้ระยะตกดิ่งลึกเกินไป
 
   // 1. วาดแป้นและห่วงบาสเกตบอลแบบใกล้เคียงของจริง (โค้งพัด)
   const createSimpleHoop = (): THREE.Group => {
@@ -298,7 +297,7 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
     ballVelocity.set(0, 0, 0);
 
     ballMesh = createBasketballMesh();
-    
+
     const { camera } = XR8.Threejs.xrScene();
     if (camera) {
       camera.add(ballMesh);
@@ -558,7 +557,7 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
         // ย้ายบอลจาก Camera เข้า Scene หลักก่อนยิง
         const worldPos = new THREE.Vector3();
         ballMesh.getWorldPosition(worldPos);
-        
+
         if (ballMesh.parent) {
           ballMesh.parent.remove(ballMesh);
         }
@@ -659,10 +658,10 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
         checkRingCollision();
         checkScore();
 
-        // เช็คการตกพื้นดินเสมือน (Y < floorY + ballRadius)
-        if (ballMesh.position.y < (floorY + ballRadius) && ballVelocity.y < 0) {
+        // เช็คการตกพื้นดิน (Y < 0.06)
+        if (ballMesh.position.y < ballRadius && ballVelocity.y < 0) {
           if (Math.abs(ballVelocity.y) > 1.2) {
-            ballMesh.position.y = floorY + ballRadius;
+            ballMesh.position.y = ballRadius;
             ballVelocity.y = -ballVelocity.y * 0.85; // เด้งพื้นสูงขึ้นอย่างเห็นได้ชัด (จากเดิม 0.45)
             ballVelocity.x *= 0.95; // ลดการเสียความเร็วเฉือน X (จาก 0.6)
             ballVelocity.z *= 0.95; // ลดการเสียความเร็วเฉลบ Z (จาก 0.6) เพื่อให้บอลเด้งกลับมาหาตัวผู้เล่นได้ใกล้ขึ้น
@@ -752,8 +751,8 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
             tempVel.y -= gravity * simDt;
             tempPos.addScaledVector(tempVel, simDt);
 
-            // หากความเร็วตกดิ่งมากไป หรือ ตกต่ำกว่าระดับพื้นดินเสมือน ให้หยุดวาดต่อ
-            if (tempVel.y < -3.0 || tempPos.y < floorY) {
+            // หากความเร็วตกดิ่งมากไป หรือ ตกต่ำกว่าระดับพื้นดิน ให้หยุดวาดต่อ
+            if (tempVel.y < -3.0 || tempPos.y < 0) {
               break;
             }
           }
