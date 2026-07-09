@@ -36,9 +36,9 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
   let hasScoredThisThrow = false;
   let canScore = false; // ตรวจสอบว่าผ่านห่วงจากบนลงล่างเท่านั้น
 
-  // ponytail: variables for flick-to-shoot dragging state and velocity tracking
+  // ponytail: variables for flick-to-shoot dragging state and velocity tracking (relative displacement)
   let isDragging = false;
-  let dragHistory: { pos: THREE.Vector3; time: number }[] = [];
+  const startDragPos = new THREE.Vector3();
   const currentDragPos = new THREE.Vector3();
   const expectedVelocity = new THREE.Vector3();
 
@@ -61,36 +61,26 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
   };
 
   const calculateExpectedVelocity = (activeCamera: THREE.Camera) => {
-    if (dragHistory.length < 2) {
-      expectedVelocity.set(0, 0, 0);
-      return;
-    }
+    // คำนวณ Displacement Vector จากจุดที่เริ่มลาก
+    const deltaWorld = new THREE.Vector3().subVectors(currentDragPos, startDragPos);
     
-    const oldest = dragHistory[0];
-    const newest = dragHistory[dragHistory.length - 1];
-    const dt = (newest.time - oldest.time) / 1000.0;
-    
-    if (dt <= 0) {
-      expectedVelocity.set(0, 0, 0);
-      return;
-    }
-    
-    const deltaWorld = new THREE.Vector3().subVectors(newest.pos, oldest.pos);
+    // แปลงไปเป็นพิกัดกล้อง (Local Space) เพื่อประเมินทิศทางและระยะทาง
     const deltaLocal = deltaWorld.clone().applyQuaternion(activeCamera.quaternion.clone().invert());
     
-    const vxLocal = deltaLocal.x / dt;
-    const vyLocal = deltaLocal.y / dt;
+    // กำหนดค่าขีดจำกัดการลากแนวตั้งสูงสุดในพื้นที่ 3D (Z = -0.4) คือ 0.25 เมตร
+    const maxDrag = 0.25;
     
-    // สเกลและจำกัดแรงยิงซ้าย-ขวา (ไม่ให้เอียงเว่อร์ไป)
-    // ponytail: clamp local x velocity to prevent extreme diagonal shots
-    let tx = vxLocal * 0.8;
+    // การลากนิ้วขึ้น (Local Y > 0) คือต้องการเพิ่มพลังยิงและโยนไปข้างหน้า
+    const dy = Math.max(0.0, deltaLocal.y);
+    const ratio = Math.min(dy / maxDrag, 1.0);
+    
+    // กำหนดทิศทางซ้าย-ขวาตามการปัดเฉียง (คูณ scale 12.0 เพื่อให้ผลสะท้อนชัดเจน และ clamp ไว้ไม่ให้เอียงเว่อร์ไป)
+    let tx = deltaLocal.x * 12.0;
     tx = Math.max(-4.0, Math.min(4.0, tx));
     
-    // ความแรงการปัดแนวตั้ง (vyLocal) ส่งผลให้บอลลอยขึ้น (Y) และพุ่งไปข้างหน้า (Z)
-    const speedRatio = Math.max(0.0, Math.min(1.0, vyLocal / 5.0));
-    
-    const ty = 2.0 + speedRatio * 6.5; // 2.0 ถึง 8.5 m/s
-    const tz = -2.0 - speedRatio * 8.5; // -2.0 ถึง -10.5 m/s
+    // ปรับแต่งแรงส่ง Y และ Z ตามอัตราส่วนการลากนิ้วขึ้น ( ratio )
+    const ty = 1.5 + ratio * 7.5;   // ช่วง 1.5 ถึง 9.0 m/s
+    const tz = -2.0 - ratio * 8.5;  // ช่วง -2.0 ถึง -10.5 m/s (เครื่องหมายลบคือพุ่งออกจากตัวผู้เล่น)
     
     const localVelocity = new THREE.Vector3(tx, ty, tz);
     expectedVelocity.copy(localVelocity).applyQuaternion(activeCamera.quaternion);
@@ -533,17 +523,18 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
         onStateChange({ status: 'thrown' });
       };
 
-      // ฟังก์ชันลากบอลรอบการชู้ตแบบใหม่
+      // ฟังก์ชันลากบอลรอบการชู้ตแบบใหม่ (วัดแรงด้วยตำแหน่งสัมบูรณ์)
       (window as any).startDragging = (clientX: number, clientY: number) => {
         const { camera: activeCamera } = XR8.Threejs.xrScene();
         if (!activeCamera) return;
 
         isDragging = true;
-        dragHistory = [];
 
         const pos = getProjectedPosition(clientX, clientY, activeCamera);
+        startDragPos.copy(pos);
         currentDragPos.copy(pos);
-        dragHistory.push({ pos: pos.clone(), time: Date.now() });
+        
+        expectedVelocity.set(0, 0, 0);
       };
 
       (window as any).updateDragging = (clientX: number, clientY: number) => {
@@ -552,12 +543,6 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
 
         const pos = getProjectedPosition(clientX, clientY, activeCamera);
         currentDragPos.copy(pos);
-
-        const now = Date.now();
-        dragHistory.push({ pos: pos.clone(), time: now });
-
-        // เก็บประวัติช่วงสั้น 150ms ท้ายก่อนปล่อย
-        dragHistory = dragHistory.filter(h => now - h.time <= 150);
 
         calculateExpectedVelocity(activeCamera);
       };
@@ -569,6 +554,9 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
         const { camera: activeCamera } = XR8.Threejs.xrScene();
         if (!activeCamera || isBallThrown || ballsLeft <= 0 || !isHoopPlaced) return;
 
+        // อัปเดตตำแหน่งจุดสุดท้ายก่อนชู้ต
+        const pos = getProjectedPosition(clientX, clientY, activeCamera);
+        currentDragPos.copy(pos);
         calculateExpectedVelocity(activeCamera);
 
         ballVelocity.copy(expectedVelocity);
