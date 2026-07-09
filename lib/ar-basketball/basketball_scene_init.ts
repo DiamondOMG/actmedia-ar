@@ -30,7 +30,9 @@ export const initBasketballScenePipelineModule = (initialMode: GameMode, onState
 
   // โหมดเกม
   const gameMode: GameMode = initialMode;
-  let timeLeft = gameMode === 'multi' ? 60 : 0; // โหมด multi เป็นแบบจำกัดเวลา 60 วินาที
+  const isTimedMode = gameMode === 'multi' || gameMode === 'fade'; // โหมดจำกัดเวลา 60 วินาที
+
+  let timeLeft = isTimedMode ? 60 : 0; 
   let combo = 0; 
   let windSpeed = 0; // ความเร็วลม
   let windDirection: 'left' | 'right' | 'none' = 'none'; // ทิศทางลม
@@ -46,14 +48,14 @@ export const initBasketballScenePipelineModule = (initialMode: GameMode, onState
     speed: number;
     amplitude: number;
     phase: number;
-    active: boolean; // บอกว่าแป้นนี้ยังไม่โดนชู้ตเข้า
-    movementType: 'horizontal' | 'vertical'; // ขยับซ้ายขวา หรือ ขึ้นลง
+    active: boolean; 
+    movementType: 'horizontal' | 'vertical'; 
   }
   let subHoops: SubHoop[] = [];
 
   // ตัวแปรด้านการควบคุมฟิสิกส์และสถานะเกม
   let ballMesh: THREE.Object3D | null = null;
-  let ballModelTemplate: THREE.Object3D | null = null; // preloaded GLB
+  let ballModelTemplate: THREE.Object3D | null = null; 
   const ballVelocity = new THREE.Vector3();
   let isBallThrown = false;
   let isHoopPlaced = false;
@@ -62,7 +64,7 @@ export const initBasketballScenePipelineModule = (initialMode: GameMode, onState
   // ระบบรอบและโอกาสยิง
   let currentRound = 1;
   let score = 0;       
-  let ballsLeft = gameMode === 'multi' ? 999 : 3; // multi บอลไม่จำกัดเพราะเป็น Time Attack
+  let ballsLeft = isTimedMode ? 999 : 3; // multi และ fade บอลไม่จำกัดเพราะเล่นแบบจำกัดเวลารวม 60 วินาที
 
   let hasScoredThisThrow = false;
   let canScore = false; 
@@ -190,7 +192,6 @@ export const initBasketballScenePipelineModule = (initialMode: GameMode, onState
 
     hoop.add(fallback_group);
 
-    // วงแหวนสีสำหรับแจ้งเวลาในโหมด Fade
     const indicator_geo = new THREE.TorusGeometry(ringRadius + 0.015, 0.008, 8, 24);
     const indicator_mat = new THREE.MeshBasicMaterial({
       color: 0x22c55e, 
@@ -290,7 +291,6 @@ export const initBasketballScenePipelineModule = (initialMode: GameMode, onState
         hoopGroup.parent.remove(hoopGroup);
       }
 
-      // ซ้าย ส่ายซ้ายขวา | กลาง ส่ายขึ้นลง | ขวา ส่ายซ้ายขวาเร็ว
       const hoopConfigs = [
         { label: 'left', xOffset: -1.2, zDist: -3.8, yHeight: 1.5, mult: 2, speed: 1.0, amp: 0.5, canBeGolden: false, type: 'horizontal' as const },
         { label: 'center', xOffset: 0.0, zDist: -2.5, yHeight: 1.4, mult: 1, speed: 1.2, amp: 0.3, canBeGolden: false, type: 'vertical' as const },
@@ -416,7 +416,7 @@ export const initBasketballScenePipelineModule = (initialMode: GameMode, onState
   // 5. รีเซ็ตลูกบอลลูกใหม่
   const resetBall = () => {
     if (!isHoopPlaced) return;
-    if (gameMode !== 'multi' && ballsLeft <= 0 && currentRound >= 3) {
+    if (!isTimedMode && ballsLeft <= 0 && currentRound >= 3) {
       return;
     }
 
@@ -429,7 +429,7 @@ export const initBasketballScenePipelineModule = (initialMode: GameMode, onState
     isBallThrown = false;
     hasScoredThisThrow = false;
     canScore = false;
-    throwTimer = 0; // รีเซ็ตเวลาชู้ตลูกใหม่
+    throwTimer = 0; 
     ballVelocity.set(0, 0, 0);
 
     ballMesh = createBasketballMesh();
@@ -454,7 +454,7 @@ export const initBasketballScenePipelineModule = (initialMode: GameMode, onState
 
     onStateChange({ 
       status: 'idle', 
-      ballsLeft: gameMode === 'multi' ? 999 : ballsLeft, 
+      ballsLeft: isTimedMode ? 999 : ballsLeft, 
       currentRound,
       gameMode,
       timeLeft,
@@ -565,13 +565,12 @@ export const initBasketballScenePipelineModule = (initialMode: GameMode, onState
     return false;
   };
 
-  // จัดการเมื่อยิงเข้าสำเร็จ (Fast Respawn ดีเลย์ 1.0 วินาทีพร้อมยิงลูกใหม่)
+  // จัดการเมื่อยิงเข้าสำเร็จ
   const handleSuccessfulScore = (multiplier: number, targetHoop?: SubHoop) => {
     hasScoredThisThrow = true;
     const pointsGained = 1 * multiplier;
     score += pointsGained;
 
-    // ถ้าเข้าห่วงในโหมดหลายแป้น: ปิดใช้งานแป้นนั้น
     if (gameMode === 'multi' && targetHoop) {
       targetHoop.active = false;
       targetHoop.group.visible = false;
@@ -593,7 +592,6 @@ export const initBasketballScenePipelineModule = (initialMode: GameMode, onState
       isBallThrown = false;
       
       if (gameMode === 'multi') {
-        // หากชู้ตลงครบ 3 แป้นแล้ว ให้เสกกลับมาเกิดใหม่พร้อมกันชุดใหม่
         if (subHoops.every(sh => !sh.active)) {
           spawnHoopForRound(1);
         }
@@ -795,7 +793,7 @@ export const initBasketballScenePipelineModule = (initialMode: GameMode, onState
         onStateChange({ status: 'thrown' });
       };
 
-      ballsLeft = gameMode === 'multi' ? 999 : 3;
+      ballsLeft = isTimedMode ? 999 : 3;
       currentRound = 1;
       score = 0;
       isHoopPlaced = false;
@@ -803,7 +801,7 @@ export const initBasketballScenePipelineModule = (initialMode: GameMode, onState
 
       onStateChange({
         score: 0,
-        ballsLeft: gameMode === 'multi' ? 999 : 3,
+        ballsLeft: isTimedMode ? 999 : 3,
         currentRound: 1,
         status: 'idle',
         isHoopPlaced: false,
@@ -865,12 +863,10 @@ export const initBasketballScenePipelineModule = (initialMode: GameMode, onState
             if (!sh.active) return;
             if (sh.amplitude > 0) {
               if (sh.movementType === 'vertical') {
-                // ขยับขึ้นลง (แกน Y)
                 const offset = Math.sin(elapsedTime * sh.speed + sh.phase) * sh.amplitude;
                 sh.group.position.copy(sh.basePosition);
                 sh.group.position.y += offset;
               } else {
-                // ขยับซ้ายขวา (แกน X)
                 const offset = Math.sin(elapsedTime * sh.speed + sh.phase) * sh.amplitude;
                 const localOffset = new THREE.Vector3(offset, 0, 0);
                 localOffset.applyQuaternion(sh.group.quaternion);
@@ -905,23 +901,31 @@ export const initBasketballScenePipelineModule = (initialMode: GameMode, onState
             if (indicator) {
               const mat = indicator.material as any;
               if (pct > 0.6) {
-                mat.color.setHex(0x22c55e); // เขียว
+                mat.color.setHex(0x22c55e);
               } else if (pct > 0.25) {
-                mat.color.setHex(0xeab308); // เหลือง
+                mat.color.setHex(0xeab308);
               } else {
-                mat.color.setHex(0xef4444); // แดง
+                mat.color.setHex(0xef4444);
               }
             }
+          }
 
-            onStateChange({ timeLeft: parseFloat(fadeTimer.toFixed(1)) });
+          // นับถอยหลัง 60 วินาทีรวมของโหมดแวบหายด้วย
+          timeLeft -= dt;
+          onStateChange({ timeLeft: Math.max(0, Math.ceil(timeLeft)) });
+          
+          if (timeLeft <= 0) {
+            timeLeft = 0;
+            ballsLeft = 0;
+            onStateChange({ status: 'idle', ballsLeft: 0, currentRound: 3, timeLeft: 0 });
+            return;
+          }
 
-            if (fadeTimer <= 0) {
-              spawnHoopForRound(currentRound);
-              resetBall();
-            }
+          if (!isBallThrown && fadeTimer <= 0) {
+            spawnHoopForRound(currentRound);
+            resetBall();
           }
         } else if (gameMode === 'multi') {
-          // โหมดหลายแป้นเปลี่ยนมาเป็นแบบจำกัดเวลา
           timeLeft -= dt;
           onStateChange({ timeLeft: Math.max(0, Math.ceil(timeLeft)) });
           
@@ -937,23 +941,16 @@ export const initBasketballScenePipelineModule = (initialMode: GameMode, onState
       if (!ballMesh) return;
 
       if (isBallThrown) {
-        // อัปเดตเวลาการลอย
         throwTimer += dt;
         
-        // ถ้าโยนลูกบาสแล้วนานเกิน 4 วินาที ให้ตัดจังหวะเป็น Missed และเกิดลูกใหม่ทันที!
         if (throwTimer >= 4.0 && !hasScoredThisThrow) {
           isBallThrown = false;
           onStateChange({ status: 'missed' });
           
-          if (gameMode === 'multi') {
+          if (isTimedMode) {
             setTimeout(() => {
               resetBall();
             }, 400);
-          } else if (gameMode === 'fade') {
-            setTimeout(() => {
-              spawnHoopForRound(currentRound);
-              resetBall();
-            }, 500);
           } else {
             ballsLeft -= 1;
             setTimeout(() => {
@@ -974,10 +971,8 @@ export const initBasketballScenePipelineModule = (initialMode: GameMode, onState
           return;
         }
 
-        // แรงโน้มถ่วง
         ballVelocity.y -= gravity * dt;
 
-        // ลมพัดแรง *3 เท่า
         if (gameMode === 'wind') {
           const windForce = windDirection === 'right' ? windSpeed : -windSpeed;
           ballVelocity.x += windForce * 3 * 0.16 * dt;
@@ -989,11 +984,10 @@ export const initBasketballScenePipelineModule = (initialMode: GameMode, onState
         checkRingCollision();
         checkScore();
 
-        // เช็คการเด้งพื้นดิน (เช็คเฉพาะในกรณีที่บอลยังไม่เข้าห่วง เพื่อไม่ให้มาแย่งกันรีเซ็ตบอล)
         if (!hasScoredThisThrow && ballMesh.position.y < ballRadius && ballVelocity.y < 0) {
           if (Math.abs(ballVelocity.y) > 1.2) {
             ballMesh.position.y = ballRadius;
-            ballVelocity.y = -ballVelocity.y * 0.85; // เด้งพื้น
+            ballVelocity.y = -ballVelocity.y * 0.85;
             ballVelocity.x *= 0.95;
             ballVelocity.z *= 0.95;
           } else {
@@ -1001,17 +995,11 @@ export const initBasketballScenePipelineModule = (initialMode: GameMode, onState
             onStateChange({ status: 'missed' });
             isBallThrown = false;
 
-            if (gameMode === 'multi') {
+            if (isTimedMode) {
               setTimeout(() => {
                 resetBall();
               }, 400);
-            } else if (gameMode === 'fade') {
-              setTimeout(() => {
-                spawnHoopForRound(currentRound);
-                resetBall();
-              }, 500);
             } else {
-              // ลดเวลารอบอลนิ่งเหลือเพียง 0.6 วินาทีในการเกิดใหม่
               ballsLeft -= 1;
               setTimeout(() => {
                 if (ballsLeft <= 0) {
@@ -1031,20 +1019,14 @@ export const initBasketballScenePipelineModule = (initialMode: GameMode, onState
           }
         }
 
-        // หลุดขอบเขต
         if (!hasScoredThisThrow && (ballMesh.position.y < -3.0 || ballMesh.position.z < -12.0 || ballMesh.position.z > 5.0)) {
           onStateChange({ status: 'missed' });
           isBallThrown = false;
 
-          if (gameMode === 'multi') {
+          if (isTimedMode) {
             setTimeout(() => {
               resetBall();
             }, 400);
-          } else if (gameMode === 'fade') {
-            setTimeout(() => {
-              spawnHoopForRound(currentRound);
-              resetBall();
-            }, 500);
           } else {
             ballsLeft -= 1;
             setTimeout(() => {
@@ -1077,7 +1059,6 @@ export const initBasketballScenePipelineModule = (initialMode: GameMode, onState
         ballMesh.rotateY(1.0 * dt);
         ballMesh.rotateX(0.5 * dt);
 
-        // แสดงเส้นประไกด์วิถีโค้ง (ยกเว้นโหมด wind ที่ต้องเอาออก)
         if (isDragging && trajectoryPoints.length > 0 && gameMode !== 'wind') {
           const maxPoints = 20;
           const simDt = 0.065;
@@ -1105,7 +1086,6 @@ export const initBasketballScenePipelineModule = (initialMode: GameMode, onState
             trajectoryPoints[i].visible = false;
           }
         } else {
-          // ซ่อนเส้นประไกด์ทั้งหมด (เช่น ในโหมด wind)
           trajectoryPoints.forEach(p => { p.visible = false; });
         }
       }

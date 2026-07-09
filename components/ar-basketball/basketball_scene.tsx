@@ -58,19 +58,22 @@ export default function BasketballScene() {
 
   const isDraggingRef = useRef<boolean>(false);
 
-  // เอฟเฟกต์แสดงข้อความสถานะการชู้ต (Scored/Missed)
+  // เอฟเฟกต์แสดงข้อความสถานะการชู้ต (Scored/Missed) และแก้ไขบั๊กป๊อปอัพขึ้นค้าง
   useEffect(() => {
     if (gameState.status === "scored") {
       const multText = gameState.activeHoopMultiplier && gameState.activeHoopMultiplier > 1 
         ? ` (x${gameState.activeHoopMultiplier})` 
         : "";
       setShowStatus(`🏀 SCORED! +${gameState.activeHoopMultiplier || 1}${multText}`);
-      const timer = setTimeout(() => setShowStatus(null), 1500);
+      const timer = setTimeout(() => setShowStatus(null), 900);
       return () => clearTimeout(timer);
     } else if (gameState.status === "missed") {
       setShowStatus("❌ MISSED");
-      const timer = setTimeout(() => setShowStatus(null), 1000);
+      const timer = setTimeout(() => setShowStatus(null), 500);
       return () => clearTimeout(timer);
+    } else if (gameState.status === "idle" || gameState.status === "aiming") {
+      // เคลียร์ป๊อปอัพทันทีที่เกิดลูกบอลใหม่พร้อมชู้ต ป้องกันป้ายค้าง
+      setShowStatus(null);
     }
   }, [gameState.status, gameState.activeHoopMultiplier]);
 
@@ -159,6 +162,8 @@ export default function BasketballScene() {
       (window as any).stopDraggingAndThrow(touch.clientX, touch.clientY);
     }
   };
+
+  const isTimedMode = gameMode === "multi" || gameMode === "fade";
 
   return (
     <div ref={containerRef} className="absolute inset-0 w-full h-full bg-black overflow-hidden select-none">
@@ -273,7 +278,7 @@ export default function BasketballScene() {
                 >
                   <div>
                     <div className="font-bold text-sm">⚡ โหมดแวบหาย (Fade)</div>
-                    <div className="text-[10px] text-slate-400 font-sans">จำกัด 1.5 วิ แป้นสุ่มเทเลพอร์ต</div>
+                    <div className="text-[10px] text-slate-400 font-sans">60 วิแป้นสุ่มเปลี่ยนจุดทุก 1.5 วิ</div>
                   </div>
                   <Timer className="h-4 w-4 text-purple-400" />
                 </button>
@@ -311,7 +316,7 @@ export default function BasketballScene() {
             </div>
 
             <div className="text-[10px] text-slate-500 font-mono text-center">
-              AR Basketball Mode Selector v2.1
+              AR Basketball Mode Selector v2.2
             </div>
           </div>
           <div className="flex-1" onClick={() => setIsMenuOpen(false)}></div>
@@ -338,24 +343,14 @@ export default function BasketballScene() {
               <span className="text-amber-400 text-sm">{gameState.score} PTS</span>
               <span className="text-white/30">|</span>
               <span className="text-slate-300">
-                {gameMode === "multi" ? "∞" : `${gameState.ballsLeft}`} 🏀
+                {isTimedMode ? "∞" : `${gameState.ballsLeft}`} 🏀
               </span>
             </div>
           </div>
 
           <div className="flex flex-col items-end gap-1.5">
-            {/* โหมดแวบหาย: แสดงเวลาถอยหลัง 1.5 วินาทีของห่วงปัจจุบัน */}
-            {gameMode === "fade" && gameState.status === "idle" && (
-              <div className="rounded-xl bg-black/70 backdrop-blur-sm border border-white/15 px-3 py-1.5 text-white font-mono text-xs flex items-center gap-1.5">
-                <Timer className="h-3.5 w-3.5 text-amber-400 animate-pulse" />
-                <span className="font-extrabold text-amber-400">
-                  {gameState.timeLeft !== undefined ? gameState.timeLeft.toFixed(1) : "1.5"}s
-                </span>
-              </div>
-            )}
-
-            {/* โหมดหลายแป้นแบบจำกัดเวลา: แสดงตัวเลขนับถอยหลังตัวโตๆ */}
-            {gameMode === "multi" && (
+            {/* โหมดจำกัดเวลา (multi และ fade): แสดงตัวเลขนับถอยหลัง 60 วินาทีรวมของโหมด */}
+            {isTimedMode && (
               <div className="rounded-xl bg-red-600/80 border border-red-500/30 px-3 py-1.5 text-white font-mono text-xs flex items-center gap-1.5 shadow-lg">
                 <Timer className="h-3.5 w-3.5 animate-spin" />
                 <span className="font-black text-sm">
@@ -385,11 +380,11 @@ export default function BasketballScene() {
             <div className="flex flex-col items-center justify-center p-2.5 bg-[#4a4a4a] border-4 border-[#c0c0c0] rounded-[28px] w-[260px] shadow-2xl animate-in zoom-in-95 duration-200">
               <div className="flex items-center justify-between w-full bg-[#1b1b1b] rounded-2xl px-4 py-2 border border-[#2b2b2b] mb-2">
                 <span className="text-xl font-extrabold italic tracking-widest text-white drop-shadow-[1px_1px_2px_rgba(0,0,0,0.8)] font-sans">
-                  {gameMode === "multi" ? "ATTACK" : "GUEST"}
+                  {isTimedMode ? "ATTACK" : "GUEST"}
                 </span>
                 <div className="bg-[#0c0c0c] border border-[#222] rounded-lg px-2.5 py-1">
                   <span className="text-red-500 font-mono text-xs font-bold tracking-widest drop-shadow-[0_0_4px_rgba(239,68,68,0.9)]">
-                    {gameMode === "multi" 
+                    {isTimedMode 
                       ? `00:${String(gameState.timeLeft || 0).padStart(2, "0")}`
                       : "01:00"
                     }
@@ -449,7 +444,7 @@ export default function BasketballScene() {
               <div className="text-sm text-slate-400 mb-1">คะแนนรวมสุทธิ</div>
               <div className="text-5xl font-black text-amber-400 font-mono leading-none mb-1">{gameState.score}</div>
               <div className="text-[10px] text-slate-500">
-                {gameMode === "multi" 
+                {isTimedMode 
                   ? "หมดเวลา 60 วินาที" 
                   : "ยิงสำเร็จจากโอกาสทั้งหมดที่มี"
                 }
