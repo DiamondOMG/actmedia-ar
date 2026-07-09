@@ -36,10 +36,10 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
   let hasScoredThisThrow = false;
   let canScore = false; // ตรวจสอบว่าผ่านห่วงจากบนลงล่างเท่านั้น
 
-  // ponytail: variables for flick-to-shoot dragging state and velocity tracking (relative displacement)
+  // ponytail: variables for flick-to-shoot dragging state and velocity tracking in Camera-Local Space to prevent AR camera jitter
   let isDragging = false;
-  const startDragPos = new THREE.Vector3();
-  const currentDragPos = new THREE.Vector3();
+  const startDragPosLocal = new THREE.Vector3();
+  const currentDragPosLocal = new THREE.Vector3();
   const expectedVelocity = new THREE.Vector3();
 
   const getProjectedPosition = (clientX: number, clientY: number, activeCamera: THREE.Camera): THREE.Vector3 => {
@@ -61,13 +61,10 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
   };
 
   const calculateExpectedVelocity = (activeCamera: THREE.Camera) => {
-    // คำนวณ Displacement Vector จากจุดที่เริ่มลาก
-    const deltaWorld = new THREE.Vector3().subVectors(currentDragPos, startDragPos);
+    // คำนวณหา displacement ในพิกัด Local ได้โดยตรงเลย เพื่อไม่ให้ขึ้นกับการส่ายสั่นไหวของกล้อง AR
+    const deltaLocal = new THREE.Vector3().subVectors(currentDragPosLocal, startDragPosLocal);
     
-    // แปลงไปเป็นพิกัดกล้อง (Local Space) เพื่อประเมินทิศทางและระยะทาง
-    const deltaLocal = deltaWorld.clone().applyQuaternion(activeCamera.quaternion.clone().invert());
-    
-    // กำหนดค่าขีดจำกัดการลากแนวตั้งสูงสุดในพื้นที่ 3D (Z = -0.4) คือ 0.25 เมตร
+    // กำหนดค่าขีดจำกัดการลากแนวตั้งสูงสุดในพื้นที่ 3D คือ 0.25 เมตร
     const maxDrag = 0.25;
     
     // การลากนิ้วขึ้น (Local Y > 0) คือต้องการเพิ่มพลังยิงและโยนไปข้างหน้า
@@ -523,16 +520,16 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
         onStateChange({ status: 'thrown' });
       };
 
-      // ฟังก์ชันลากบอลรอบการชู้ตแบบใหม่ (วัดแรงด้วยตำแหน่งสัมบูรณ์)
+      // ฟังก์ชันลากบอลรอบการชู้ตแบบใหม่ (วัดแรงด้วยตำแหน่งสัมบูรณ์บน Local Space)
       (window as any).startDragging = (clientX: number, clientY: number) => {
         const { camera: activeCamera } = XR8.Threejs.xrScene();
         if (!activeCamera) return;
 
         isDragging = true;
 
-        const pos = getProjectedPosition(clientX, clientY, activeCamera);
-        startDragPos.copy(pos);
-        currentDragPos.copy(pos);
+        const worldPos = getProjectedPosition(clientX, clientY, activeCamera);
+        startDragPosLocal.copy(worldPos).applyMatrix4(activeCamera.matrixWorldInverse);
+        currentDragPosLocal.copy(startDragPosLocal);
         
         expectedVelocity.set(0, 0, 0);
       };
@@ -541,8 +538,8 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
         const { camera: activeCamera } = XR8.Threejs.xrScene();
         if (!activeCamera) return;
 
-        const pos = getProjectedPosition(clientX, clientY, activeCamera);
-        currentDragPos.copy(pos);
+        const worldPos = getProjectedPosition(clientX, clientY, activeCamera);
+        currentDragPosLocal.copy(worldPos).applyMatrix4(activeCamera.matrixWorldInverse);
 
         calculateExpectedVelocity(activeCamera);
       };
@@ -555,8 +552,8 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
         if (!activeCamera || isBallThrown || ballsLeft <= 0 || !isHoopPlaced) return;
 
         // อัปเดตตำแหน่งจุดสุดท้ายก่อนชู้ต
-        const pos = getProjectedPosition(clientX, clientY, activeCamera);
-        currentDragPos.copy(pos);
+        const worldPos = getProjectedPosition(clientX, clientY, activeCamera);
+        currentDragPosLocal.copy(worldPos).applyMatrix4(activeCamera.matrixWorldInverse);
         calculateExpectedVelocity(activeCamera);
 
         ballVelocity.copy(expectedVelocity);
@@ -712,8 +709,12 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
         }
       } else {
         if (isDragging) {
-          // ลากนิ้วไปไหน ลูกบอลค่อยๆ ตามไป
-          ballMesh.position.lerp(currentDragPos, 0.3);
+          // ลากนิ้วไปไหน ลูกบอลค่อยๆ ตามตำแหน่ง World Pos ที่อัปเดตตามเฟรมกล้องแบบเรียลไทม์ (ป้องกันการสั่น)
+          const currentDragPosWorld = currentDragPosLocal.clone().applyMatrix4(camera.matrixWorld);
+          ballMesh.position.lerp(currentDragPosWorld, 0.3);
+          
+          // อัปเดตทิศทางการยิงโลกเพื่อปรับวิถีโค้งตามการหันของกล้องแบบเรียลไทม์
+          calculateExpectedVelocity(camera);
         } else {
           // ซิงก์ตำแหน่งลูกบอลให้อยู่ติดกับกล้อง (เสมือนผู้ใช้ถือไว้เพื่อพร้อมปัดชู้ต)
           const offset = new THREE.Vector3(0, -0.15, -0.4);
