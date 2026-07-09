@@ -76,8 +76,8 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
   let difficulty: 'easy' | 'hard' = 'easy';
   const hoopBasePosition = new THREE.Vector3();
 
-  const ballRadius = 0.11; // hitbox radius (เมตร)
-  const ballModelScale = 0.115; // สเกลลูกใหม่สัมพันธ์กับขนาดรัศมี
+  const ballRadius = 0.08; // hitbox radius (เมตร)
+  const ballModelScale = 0.083; // สเกลลูกใหม่สัมพันธ์กับขนาดรัศมี
   const ringRadius = 0.28;
   const gravity = 9.81;
 
@@ -662,9 +662,9 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
         if (ballMesh.position.y < ballRadius && ballVelocity.y < 0) {
           if (Math.abs(ballVelocity.y) > 1.2) {
             ballMesh.position.y = ballRadius;
-            ballVelocity.y = -ballVelocity.y * 0.65; // เด้งพื้นสูงขึ้นอย่างเห็นได้ชัด (จากเดิม 0.45)
-            ballVelocity.x *= 0.85; // ลดการเสียความเร็วเฉือน X (จาก 0.6)
-            ballVelocity.z *= 0.85; // ลดการเสียความเร็วเฉลบ Z (จาก 0.6) เพื่อให้บอลเด้งกลับมาหาตัวผู้เล่นได้ใกล้ขึ้น
+            ballVelocity.y = -ballVelocity.y * 0.85; // เด้งพื้นสูงขึ้นอย่างเห็นได้ชัด (จากเดิม 0.45)
+            ballVelocity.x *= 0.95; // ลดการเสียความเร็วเฉือน X (จาก 0.6)
+            ballVelocity.z *= 0.95; // ลดการเสียความเร็วเฉลบ Z (จาก 0.6) เพื่อให้บอลเด้งกลับมาหาตัวผู้เล่นได้ใกล้ขึ้น
           } else {
             ballVelocity.set(0, 0, 0);
             if (!hasScoredThisThrow) {
