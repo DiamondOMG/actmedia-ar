@@ -2,9 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Home, RotateCcw } from "lucide-react";
+import { Home, RotateCcw, Menu, X, Wind, Timer, Compass, Target } from "lucide-react";
 import * as THREE from "three";
-import { initBasketballScenePipelineModule, GameState } from "@/lib/ar-basketball/basketball_scene_init";
+import { initBasketballScenePipelineModule, GameState, GameMode } from "@/lib/ar-basketball/basketball_scene_init";
 
 declare const window: any;
 declare const XR8: any;
@@ -16,13 +16,17 @@ export default function BasketballScene() {
   const [xrStarted, setXrStarted] = useState(false);
   const [gameState, setGameState] = useState<GameState>({
     score: 0,
-    ballsLeft: 10,
+    ballsLeft: 3,
     status: "idle",
     isAssetLoaded: false,
     assetLoadProgress: 0,
   });
   const [showStatus, setShowStatus] = useState<string | null>(null);
   const [difficulty, setDifficulty] = useState<"easy" | "hard">("easy");
+  
+  // โหมดเกม และ แฮมเบอร์เกอร์เมนู
+  const [gameMode, setGameMode] = useState<GameMode>("normal");
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const toggleDifficulty = (mode: "easy" | "hard") => {
     setDifficulty(mode);
@@ -31,12 +35,45 @@ export default function BasketballScene() {
     }
   };
 
+  // ดึงค่า URL Parameter เมื่อ Mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const modeParam = params.get("mode") as GameMode;
+      if (modeParam && ["normal", "fade", "multi", "wind", "time_attack"].includes(modeParam)) {
+        setGameMode(modeParam);
+      }
+    }
+  }, []);
+
+  // ซิงก์โหมดไปยัง Three.js เมื่อเริ่มฉากแล้ว
+  useEffect(() => {
+    if (gameState.isHoopPlaced && typeof window !== "undefined" && (window as any).setGameMode) {
+      (window as any).setGameMode(gameMode);
+    }
+  }, [gameState.isHoopPlaced, gameMode]);
+
+  const selectMode = (mode: GameMode) => {
+    setGameMode(mode);
+    setIsMenuOpen(false);
+    if (typeof window !== "undefined") {
+      if ((window as any).setGameMode) {
+        (window as any).setGameMode(mode);
+      }
+      const newUrl = `${window.location.pathname}?mode=${mode}`;
+      window.history.pushState(null, "", newUrl);
+    }
+  };
+
   const isDraggingRef = useRef<boolean>(false);
 
   // เอฟเฟกต์แสดงข้อความสถานะ (เช่น Scored!, Missed!)
   useEffect(() => {
     if (gameState.status === "scored") {
-      setShowStatus("🏀 SCORED! +1");
+      const multText = gameState.activeHoopMultiplier && gameState.activeHoopMultiplier > 1 
+        ? ` (x${gameState.activeHoopMultiplier})` 
+        : "";
+      setShowStatus(`🏀 SCORED! +${gameState.activeHoopMultiplier || 1}${multText}`);
       const timer = setTimeout(() => setShowStatus(null), 1500);
       return () => clearTimeout(timer);
     } else if (gameState.status === "missed") {
@@ -44,7 +81,7 @@ export default function BasketballScene() {
       const timer = setTimeout(() => setShowStatus(null), 1000);
       return () => clearTimeout(timer);
     }
-  }, [gameState.status]);
+  }, [gameState.status, gameState.activeHoopMultiplier]);
 
   useEffect(() => {
     const startAR = () => {
@@ -193,41 +230,188 @@ export default function BasketballScene() {
         </div>
       )}
 
-      {/* ───────── UI HUD (Heads-Up Display) ไว้ฝั่งซ้ายบน ───────── */}
+      {/* ───────── ปุ่ม Hamburger Menu (มุมบนซ้าย) ───────── */}
       {gameState.isHoopPlaced && (
-        <div className="absolute top-4 left-3 z-10 pointer-events-none">
-          <div className="rounded-xl bg-black/60 backdrop-blur-sm border border-white/10 px-3 py-2 text-white font-mono text-xs flex flex-col gap-1">
-            <div className="flex items-center gap-1.5">
-              <span className="text-purple-400 font-bold text-[10px]">R{gameState.currentRound || 1}/3</span>
-              <span className="text-white/30">|</span>
-              <span className="text-amber-400 font-bold">{gameState.score}</span>
-              <span className="text-white/30">|</span>
-              <span className="text-slate-300">{gameState.ballsLeft}🏀</span>
+        <button
+          onClick={() => setIsMenuOpen(true)}
+          className="absolute top-4 left-3 z-30 flex h-10 w-10 items-center justify-center rounded-xl bg-black/60 text-white backdrop-blur border border-white/10 hover:bg-black/80 transition active:scale-95 shadow"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+      )}
+
+      {/* ───────── Hamburger Menu Panel (Glassmorphism Slide-over) ───────── */}
+      {isMenuOpen && (
+        <div className="absolute inset-0 z-40 flex bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-72 bg-slate-950/90 border-r border-white/15 h-full p-6 text-white flex flex-col justify-between shadow-2xl animate-in slide-in-from-left duration-300">
+            <div>
+              <div className="flex items-center justify-between mb-8">
+                <span className="text-lg font-black tracking-wider text-purple-400 flex items-center gap-1.5 font-sans">
+                  🏀 SELECT MODE
+                </span>
+                <button
+                  onClick={() => setIsMenuOpen(false)}
+                  className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="flex flex-col gap-3 font-sans">
+                <button
+                  onClick={() => selectMode("normal")}
+                  className={`w-full p-3 rounded-xl border text-left transition flex items-center justify-between ${
+                    gameMode === "normal"
+                      ? "bg-purple-600/20 border-purple-500 text-white"
+                      : "bg-white/5 border-white/5 hover:bg-white/10 text-slate-300"
+                  }`}
+                >
+                  <div>
+                    <div className="font-bold text-sm">🏆 โหมดปกติ (Normal)</div>
+                    <div className="text-[10px] text-slate-400">ยิง 3 ระยะ ท้าทายคะแนนตัวคูณ</div>
+                  </div>
+                  <Target className="h-4 w-4 text-purple-400 font-sans" />
+                </button>
+
+                <button
+                  onClick={() => selectMode("fade")}
+                  className={`w-full p-3 rounded-xl border text-left transition flex items-center justify-between ${
+                    gameMode === "fade"
+                      ? "bg-purple-600/20 border-purple-500 text-white"
+                      : "bg-white/5 border-white/5 hover:bg-white/10 text-slate-300"
+                  }`}
+                >
+                  <div>
+                    <div className="font-bold text-sm">⚡ โหมดแวบหาย (Fade)</div>
+                    <div className="text-[10px] text-slate-400">จำกัด 3.5 วิ แป้นสุ่มเทเลพอร์ต</div>
+                  </div>
+                  <Timer className="h-4 w-4 text-purple-400" />
+                </button>
+
+                <button
+                  onClick={() => selectMode("multi")}
+                  className={`w-full p-3 rounded-xl border text-left transition flex items-center justify-between ${
+                    gameMode === "multi"
+                      ? "bg-purple-600/20 border-purple-500 text-white"
+                      : "bg-white/5 border-white/5 hover:bg-white/10 text-slate-300"
+                  }`}
+                >
+                  <div>
+                    <div className="font-bold text-sm">🔱 โหมดหลายแป้น (Multi-Hoop)</div>
+                    <div className="text-[10px] text-slate-400">3 ระยะพร้อมกัน / ลุ้นแป้นทอง *5</div>
+                  </div>
+                  <Compass className="h-4 w-4 text-purple-400" />
+                </button>
+
+                <button
+                  onClick={() => selectMode("wind")}
+                  className={`w-full p-3 rounded-xl border text-left transition flex items-center justify-between ${
+                    gameMode === "wind"
+                      ? "bg-purple-600/20 border-purple-500 text-white"
+                      : "bg-white/5 border-white/5 hover:bg-white/10 text-slate-300"
+                  }`}
+                >
+                  <div>
+                    <div className="font-bold text-sm">💨 แรงลมท้าทาย (Wind)</div>
+                    <div className="text-[10px] text-slate-400">ลมพัดเบี่ยงทิศทางลูกบาส</div>
+                  </div>
+                  <Wind className="h-4 w-4 text-purple-400" />
+                </button>
+
+                <button
+                  onClick={() => selectMode("time_attack")}
+                  className={`w-full p-3 rounded-xl border text-left transition flex items-center justify-between ${
+                    gameMode === "time_attack"
+                      ? "bg-purple-600/20 border-purple-500 text-white"
+                      : "bg-white/5 border-white/5 hover:bg-white/10 text-slate-300"
+                  }`}
+                >
+                  <div>
+                    <div className="font-bold text-sm">🔥 จับเวลาบ้าคลั่ง (Time Attack)</div>
+                    <div className="text-[10px] text-slate-400">60 วิไม่จำกัดบอล ยิงคอมโบเพิ่มเวลา</div>
+                  </div>
+                  <Timer className="h-4 w-4 text-purple-400" />
+                </button>
+              </div>
             </div>
+
+            <div className="text-[10px] text-slate-500 font-mono text-center">
+              AR Basketball Mode Selector v2.0
+            </div>
+          </div>
+          {/* ส่วนปิดเมื่อแตะขอบนอก */}
+          <div className="flex-1" onClick={() => setIsMenuOpen(false)}></div>
+        </div>
+      )}
+
+      {/* ───────── UI HUD (Heads-Up Display) ปรับเปลี่ยนตามโหมด ───────── */}
+      {gameState.isHoopPlaced && (
+        <div className="absolute top-4 left-16 right-3 z-10 pointer-events-none flex justify-between items-start">
+          {/* ข้อมูลพื้นฐานโหมด */}
+          <div className="rounded-xl bg-black/60 backdrop-blur-sm border border-white/10 px-3 py-2 text-white font-mono text-xs flex flex-col gap-0.5">
+            <span className="text-[10px] text-purple-400 font-black tracking-wide uppercase">
+              {gameMode === "normal" && "🏆 Normal"}
+              {gameMode === "fade" && "⚡ Fade & Teleport"}
+              {gameMode === "multi" && "🔱 Multi-Hoop"}
+              {gameMode === "wind" && "💨 Wind Challenge"}
+              {gameMode === "time_attack" && "🔥 Time Attack"}
+            </span>
+            <div className="flex items-center gap-1.5 font-bold">
+              {gameMode === "normal" && (
+                <>
+                  <span className="text-white/60">R{gameState.currentRound}/3</span>
+                  <span className="text-white/30">|</span>
+                </>
+              )}
+              <span className="text-amber-400 text-sm">{gameState.score} PTS</span>
+              <span className="text-white/30">|</span>
+              <span className="text-slate-300">
+                {gameMode === "time_attack" ? "∞" : `${gameState.ballsLeft}`} 🏀
+              </span>
+            </div>
+          </div>
+
+          {/* แผงแสดงสถานะเพิ่มเติมของแต่ละโหมด */}
+          <div className="flex flex-col items-end gap-1.5">
+            {/* โหมดแวบหาย: แสดงเวลาถอยหลัง 3.5 วินาทีของห่วงปัจจุบัน */}
+            {gameMode === "fade" && gameState.status === "idle" && (
+              <div className="rounded-xl bg-black/70 backdrop-blur-sm border border-white/15 px-3 py-1.5 text-white font-mono text-xs flex items-center gap-1.5">
+                <Timer className="h-3.5 w-3.5 text-amber-400 animate-pulse" />
+                <span className="font-extrabold text-amber-400">
+                  {gameState.timeLeft !== undefined ? gameState.timeLeft.toFixed(1) : "3.5"}s
+                </span>
+              </div>
+            )}
+
+            {/* โหมดจับเวลาบ้าคลั่ง: แสดงตัวเลขนับถอยหลังตัวโตๆ */}
+            {gameMode === "time_attack" && (
+              <div className="rounded-xl bg-red-600/80 border border-red-500/30 px-3 py-1.5 text-white font-mono text-xs flex items-center gap-1.5 shadow-lg">
+                <Timer className="h-3.5 w-3.5 animate-spin" />
+                <span className="font-black text-sm">
+                  {gameState.timeLeft !== undefined ? gameState.timeLeft : "60"}s
+                </span>
+              </div>
+            )}
+
+            {/* โหมดแรงลม: แสดงทิศทางและความเร็วลม (Wind Widget) */}
+            {gameMode === "wind" && gameState.windSpeed !== undefined && gameState.windSpeed > 0 && (
+              <div className="rounded-xl bg-sky-900/60 backdrop-blur-sm border border-sky-400/20 px-3 py-1.5 text-white font-mono text-xs flex items-center gap-1.5">
+                <Wind className="h-3.5 w-3.5 text-sky-300" />
+                <span className="font-bold text-sky-200">
+                  {gameState.windDirection === "right" ? "ลมพัดขวา →" : "← ลมพัดซ้าย"} {gameState.windSpeed} m/s
+                </span>
+              </div>
+            )}
           </div>
         </div>
       )}
-      {/* ───────── ปุ่มปรับระดับความยาก Easy / Hard (มุมขวาบน) ───────── */}
-      {gameState.isHoopPlaced && (
-        <div className="absolute top-4 right-3 z-10 flex gap-1 rounded-xl bg-black/60 backdrop-blur-sm p-1 border border-white/10 font-mono text-[10px] font-bold">
-          <button
-            onClick={() => toggleDifficulty("easy")}
-            className={`px-3 py-1.5 rounded-lg transition active:scale-95 ${difficulty === "easy"
-                ? "bg-purple-600 text-white shadow"
-                : "text-slate-400 hover:text-white"
-              }`}
-          >
-            EASY
-          </button>
-          <button
-            onClick={() => toggleDifficulty("hard")}
-            className={`px-3 py-1.5 rounded-lg transition active:scale-95 ${difficulty === "hard"
-                ? "bg-purple-600 text-white shadow"
-                : "text-slate-400 hover:text-white"
-              }`}
-          >
-            HARD
-          </button>
+
+      {/* ───────── ป้าย Combo ขนาดใหญ่ (สำหรับโหมด Time Attack) ───────── */}
+      {gameMode === "time_attack" && gameState.combo !== undefined && gameState.combo > 0 && (
+        <div className="absolute top-20 left-0 right-0 z-10 pointer-events-none flex justify-center animate-bounce">
+          <div className="rounded-full bg-gradient-to-r from-amber-500 to-orange-600 border-2 border-white px-4 py-1 text-white font-extrabold text-xs shadow-lg tracking-wider font-mono">
+            🔥 COMBO x{gameState.combo} (+{gameState.combo + 3}s)
+          </div>
         </div>
       )}
 
@@ -239,10 +423,15 @@ export default function BasketballScene() {
             <div className="flex flex-col items-center justify-center p-2.5 bg-[#4a4a4a] border-4 border-[#c0c0c0] rounded-[28px] w-[260px] shadow-2xl animate-in zoom-in-95 duration-200">
               {/* ส่วนบน (Time & Team) */}
               <div className="flex items-center justify-between w-full bg-[#1b1b1b] rounded-2xl px-4 py-2 border border-[#2b2b2b] mb-2">
-                <span className="text-xl font-extrabold italic tracking-widest text-white drop-shadow-[1px_1px_2px_rgba(0,0,0,0.8)]">GUEST</span>
+                <span className="text-xl font-extrabold italic tracking-widest text-white drop-shadow-[1px_1px_2px_rgba(0,0,0,0.8)]">
+                  {gameMode === "time_attack" ? "ATTACK" : "GUEST"}
+                </span>
                 <div className="bg-[#0c0c0c] border border-[#222] rounded-lg px-2.5 py-1">
                   <span className="text-red-500 font-mono text-xs font-bold tracking-widest drop-shadow-[0_0_4px_rgba(239,68,68,0.9)]">
-                    01:00
+                    {gameMode === "time_attack" 
+                      ? `00:${String(gameState.timeLeft || 0).padStart(2, "0")}`
+                      : "01:00"
+                    }
                   </span>
                 </div>
               </div>
@@ -285,18 +474,30 @@ export default function BasketballScene() {
         </div>
       )}
 
-      {/* บอร์ดสรุปคะแนนหลังเล่นจบครบ 3 รอบ */}
-      {gameState.ballsLeft === 0 && gameState.currentRound === 3 && gameState.status === "idle" && (
+      {/* บอร์ดสรุปคะแนนหลังเล่นจบ */}
+      {gameState.ballsLeft === 0 && gameState.status === "idle" && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md px-6">
           <div className="bg-slate-900 border border-white/10 rounded-3xl p-7 max-w-sm w-full text-center text-white shadow-2xl animate-in zoom-in-95 duration-200">
             <span className="text-4xl mb-2 block">🏆</span>
-            <h2 className="text-2xl font-bold mb-1">จบการแข่งขัน 3 รอบ</h2>
-            <p className="text-slate-400 text-xs mb-5">สรุปคะแนนการทดสอบชู้ตบาสเก็ตบอล AR</p>
+            <h2 className="text-2xl font-bold mb-1">สิ้นสุดการแข่งขัน</h2>
+            <p className="text-slate-400 text-xs mb-5 font-mono">
+              โหมดการเล่น: {" "}
+              {gameMode === "normal" && "โหมดปกติ (Normal)"}
+              {gameMode === "fade" && "โหมดแวบหาย (Fade)"}
+              {gameMode === "multi" && "โหมดหลายแป้น (Multi-Hoop)"}
+              {gameMode === "wind" && "โหมดแรงลม (Wind Challenge)"}
+              {gameMode === "time_attack" && "โหมดจับเวลาบ้าคลั่ง (Time Attack)"}
+            </p>
 
             <div className="bg-white/5 rounded-2xl p-4 border border-white/5 mb-6">
               <div className="text-sm text-slate-400 mb-1">คะแนนรวมสุทธิ</div>
               <div className="text-5xl font-black text-amber-400 font-mono leading-none mb-1">{gameState.score}</div>
-              <div className="text-[10px] text-slate-500">ยิงสำเร็จจากโอกาสทั้งหมด 9 ครั้ง</div>
+              <div className="text-[10px] text-slate-500 font-sans">
+                {gameMode === "time_attack" 
+                  ? "หมดเวลา 60 วินาที" 
+                  : "ยิงสำเร็จจากโอกาสทั้งหมดที่มี"
+                }
+              </div>
             </div>
 
             <button

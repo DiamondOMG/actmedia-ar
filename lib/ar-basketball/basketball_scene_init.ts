@@ -3,6 +3,8 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 declare const XR8: any;
 
+export type GameMode = 'normal' | 'fade' | 'multi' | 'wind' | 'time_attack';
+
 export interface GameState {
   score: number;
   ballsLeft: number;
@@ -12,6 +14,12 @@ export interface GameState {
   currentRound?: number;
   isAssetLoaded?: boolean;
   assetLoadProgress?: number;
+  gameMode?: GameMode;
+  timeLeft?: number;
+  combo?: number;
+  windSpeed?: number;
+  windDirection?: 'left' | 'right' | 'none';
+  activeHoopMultiplier?: number;
 }
 
 export const initBasketballScenePipelineModule = (onStateChange: (state: Partial<GameState>) => void) => {
@@ -19,6 +27,26 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
   let hoopGroup: THREE.Group;
   let trajectoryPoints: THREE.Mesh[] = [];
   const clock = new THREE.Clock();
+
+  // โหมดเกม
+  let gameMode: GameMode = 'normal';
+  let timeLeft = 60; // สำหรับ Time Attack
+  let combo = 0; // คอมโบการยิงเข้าต่อเนื่อง
+  let windSpeed = 0; // ความเร็วลม
+  let windDirection: 'left' | 'right' | 'none' = 'none'; // ทิศทางลม
+  let fadeTimer = 3.5; // เวลาโหมดแวบหาย
+
+  // ระบบหลายแป้นบาส
+  interface SubHoop {
+    group: THREE.Group;
+    basePosition: THREE.Vector3;
+    scoreMultiplier: number;
+    isGolden: boolean;
+    speed: number;
+    amplitude: number;
+    phase: number;
+  }
+  let subHoops: SubHoop[] = [];
 
   // ตัวแปรด้านการควบคุมฟิสิกส์และสถานะเกม
   let ballMesh: THREE.Object3D | null = null;
@@ -163,6 +191,20 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
 
     hoop.add(fallback_group);
 
+    // วงแหวนแจ้งเตือนเวลาสำหรับโหมด Fade (สวมเข้ากับห่วงจริงและ fallback)
+    const indicator_geo = new THREE.TorusGeometry(ringRadius + 0.015, 0.008, 8, 24);
+    const indicator_mat = new THREE.MeshBasicMaterial({
+      color: 0x22c55e, // เขียวเริ่มต้น
+      transparent: true,
+      opacity: 0.8,
+      visible: false // ปิดใช้งานเป็นค่าเริ่มต้น
+    });
+    const indicator_mesh = new THREE.Mesh(indicator_geo, indicator_mat);
+    indicator_mesh.name = "fade-indicator-ring";
+    indicator_mesh.rotation.x = Math.PI / 2;
+    indicator_mesh.position.set(0, 0.1, 0.35);
+    hoop.add(indicator_mesh);
+
     return hoop;
   };
 
@@ -239,49 +281,174 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
     }
   };
 
-  // 4. สปอว์นแป้นบาสในแต่ละรอบ (สุ่ม X, Y และสลับระยะลึก Z แบบฟิก)
+  // ลบห่วงย่อยออกทั้งหมด
+  const clearSubHoops = () => {
+    subHoops.forEach(sh => {
+      if (sh.group.parent) {
+        sh.group.parent.remove(sh.group);
+      }
+    });
+    subHoops = [];
+  };
+
+  // 4. สปอว์นแป้นบาสในแต่ละรอบ (สุ่ม X, Y และสลับระยะลึก Z ตามโหมดการเล่น)
   const spawnHoopForRound = (round: number) => {
     if (typeof XR8 === 'undefined') return;
     const { camera } = XR8.Threejs.xrScene();
     if (!camera) return;
 
-    // ระยะลึก Z คงที่ในแต่ละรอบ (รอบ 1: -2.5m, รอบ 2: -3.8m, รอบ 3: -5.0m)
-    const roundZs = [-2.5, -3.8, -5.0];
-    const hoopZ = roundZs[round - 1] || -3.0;
+    // เคลียร์ห่วงย่อยเดิมก่อนเสมอ
+    clearSubHoops();
 
-    // สุ่มตำแหน่ง X (แนวขวาง) และ Y (ความสูงระดับสายตา)
-    const randomX = (Math.random() - 0.5) * 1.4; // สุ่มระหว่าง -0.7 ถึง 0.7 เมตร
-    const randomY = 1.4 + Math.random() * 0.4;   // สุ่มระหว่าง 1.4 ถึง 1.8 เมตร
+    // ซ่อนแป้นหลักชั่วคราวหากเล่นโหมด Multi-hoop
+    if (gameMode === 'multi') {
+      if (hoopGroup && hoopGroup.parent) {
+        hoopGroup.parent.remove(hoopGroup);
+      }
 
-    // คำนวณพิกัดโลกจากทิศหน้ากล้อง
+      // สร้างห่วงย่อย 3 แป้น (ซ้าย, กลาง, ขวา)
+      const hoopConfigs = [
+        { label: 'left', xOffset: -1.2, zDist: -3.8, yHeight: 1.5, mult: 2, speed: 1.0, amp: 0.5, canBeGolden: false },
+        { label: 'center', xOffset: 0.0, zDist: -2.5, yHeight: 1.4, mult: 1, speed: 0.0, amp: 0.0, canBeGolden: false },
+        { label: 'right', xOffset: 1.2, zDist: -5.0, yHeight: 1.6, mult: 3, speed: 1.8, amp: 0.7, canBeGolden: true }
+      ];
+
+      hoopConfigs.forEach(cfg => {
+        const clonedGroup = hoopGroup.clone();
+        
+        // ตรวจสอบว่าโหมดนี้เป็นแป้นสีทองหรือไม่ (เฉพาะอันขวาที่มีโอกาส 30%)
+        const isGolden = cfg.canBeGolden && Math.random() < 0.3;
+        const multiplier = isGolden ? 5 : cfg.mult;
+
+        if (isGolden) {
+          clonedGroup.traverse((child: any) => {
+            if (child.isMesh) {
+              child.material = child.material.clone();
+              child.material.color.setHex(0xffb700); // สีทองคำอร่าม
+              child.material.metalness = 0.95;
+              child.material.roughness = 0.05;
+              // ถ้ามี fallback net หรือ fallback ring ให้เปลี่ยนสีเช่นกัน
+              if (child.name === 'net' || child.name === 'fallback-hoop') {
+                child.material.color.setHex(0xffd700);
+              }
+            }
+          });
+        }
+
+        // ปิดการแสดงผล fade indicator บนห่วงย่อย
+        const indicator = clonedGroup.getObjectByName("fade-indicator-ring");
+        if (indicator) indicator.visible = false;
+
+        // คำนวณพิกัดจากกล้อง
+        const localPos = new THREE.Vector3(cfg.xOffset, 0, cfg.zDist);
+        localPos.applyQuaternion(camera.quaternion);
+        
+        clonedGroup.position.copy(camera.position).add(localPos);
+        clonedGroup.position.y = cfg.yHeight;
+
+        // หันหน้าแป้นเข้าหาผู้เล่น
+        const lookPos = new THREE.Vector3(camera.position.x, clonedGroup.position.y, camera.position.z);
+        clonedGroup.lookAt(lookPos);
+
+        scene.add(clonedGroup);
+
+        subHoops.push({
+          group: clonedGroup,
+          basePosition: clonedGroup.position.clone(),
+          scoreMultiplier: multiplier,
+          isGolden,
+          speed: cfg.speed,
+          amplitude: cfg.amp,
+          phase: Math.random() * Math.PI * 2 // สุ่มเฟสเริ่มต้นให้เคลื่อนไหวไม่ตรงกัน
+        });
+      });
+
+      isHoopPlaced = true;
+      onStateChange({
+        isHoopPlaced: true,
+        currentRound: round,
+        ballsLeft,
+        gameMode,
+        timeLeft
+      });
+      return;
+    }
+
+    // สำหรับโหมดปกติอื่นๆ: เสกแป้นหลักเดี่ยว
+    if (scene && !scene.children.includes(hoopGroup)) {
+      scene.add(hoopGroup);
+    }
+
+    // กำหนดระยะลึก Z ของแป้นหลัก
+    let hoopZ = -3.0;
+    if (gameMode === 'normal') {
+      const roundZs = [-2.5, -3.8, -5.0];
+      hoopZ = roundZs[round - 1] || -3.0;
+    } else if (gameMode === 'fade') {
+      // โหมดแวบหาย สุ่มเกิดในระยะ -2.5 ถึง -4.5 เมตร
+      hoopZ = -2.5 - Math.random() * 2.0;
+    } else if (gameMode === 'time_attack') {
+      // โหมดจำกัดเวลา สุ่มระยะเช่นกัน
+      hoopZ = -2.8 - Math.random() * 1.8;
+    } else if (gameMode === 'wind') {
+      // โหมดแรงลม สลับ 3 ระยะตามรอบปกติ
+      const roundZs = [-2.5, -3.8, -4.5];
+      hoopZ = roundZs[round - 1] || -3.2;
+    }
+
+    // สุ่มตำแหน่ง X และ Y
+    const randomX = (Math.random() - 0.5) * (gameMode === 'fade' ? 1.0 : 1.3); // Fade mode ให้สุ่มแคบกว่าหน่อย
+    const randomY = 1.4 + Math.random() * 0.4;
+
     const localPos = new THREE.Vector3(randomX, 0, hoopZ);
     localPos.applyQuaternion(camera.quaternion);
     hoopGroup.position.copy(camera.position).add(localPos);
     hoopGroup.position.y = randomY;
 
-    // หันหน้าแป้นเข้าหาตำแหน่งกล้องแนวระนาบ
+    // หันหน้าแป้นเข้าหากล้อง
     const camLookPos = new THREE.Vector3(camera.position.x, hoopGroup.position.y, camera.position.z);
     hoopGroup.lookAt(camLookPos);
 
-    // บันทึกตำแหน่งฐานเริ่มต้น เพื่อนำไปใช้เคลื่อนไหวส่ายในโหมด HARD
+    // บันทึกตำแหน่งฐานเริ่มต้น
     hoopBasePosition.copy(hoopGroup.position);
 
-    if (scene && !scene.children.includes(hoopGroup)) {
-      scene.add(hoopGroup);
+    // ควบคุมการแสดงผลของ Fade Indicator Ring
+    const indicator = hoopGroup.getObjectByName("fade-indicator-ring") as THREE.Mesh;
+    if (indicator) {
+      if (gameMode === 'fade') {
+        indicator.visible = true;
+        indicator.material = (indicator.material as THREE.Material).clone(); // โคลนวัสดุเพื่อเปลี่ยนสีแยกอิสระ
+        (indicator.material as any).color.setHex(0x22c55e); // เริ่มต้นเขียว
+      } else {
+        indicator.visible = false;
+      }
+    }
+
+    // หากเป็นโหมดแรงลม: สุ่มทิศทางและกำลังลมใหม่เมื่อสปอว์นแป้น
+    if (gameMode === 'wind') {
+      windDirection = Math.random() > 0.5 ? 'right' : 'left';
+      windSpeed = parseFloat((1.5 + Math.random() * 3.0).toFixed(1));
+    } else {
+      windDirection = 'none';
+      windSpeed = 0;
     }
 
     isHoopPlaced = true;
     onStateChange({
       isHoopPlaced: true,
       currentRound: round,
-      ballsLeft
+      ballsLeft,
+      gameMode,
+      timeLeft,
+      windSpeed,
+      windDirection
     });
   };
 
   // 5. รีเซ็ตลูกบอลลูกใหม่
   const resetBall = () => {
     if (!isHoopPlaced) return;
-    if (ballsLeft <= 0 && currentRound >= 3) {
+    if (gameMode !== 'time_attack' && ballsLeft <= 0 && currentRound >= 3) {
       return;
     }
 
@@ -307,51 +474,68 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
       scene.add(ballMesh);
     }
 
-    onStateChange({ status: 'idle', ballsLeft, currentRound });
+    // รีเซ็ตตัวจับเวลาในโหมดแวบหายเมื่อลูกบอลพร้อมโยน
+    if (gameMode === 'fade') {
+      fadeTimer = 3.5;
+      const indicator = hoopGroup.getObjectByName("fade-indicator-ring") as THREE.Mesh;
+      if (indicator) {
+        indicator.visible = true;
+        (indicator.material as any).color.setHex(0x22c55e);
+      }
+    }
+
+    onStateChange({ 
+      status: 'idle', 
+      ballsLeft: gameMode === 'time_attack' ? 999 : ballsLeft, 
+      currentRound,
+      gameMode,
+      timeLeft,
+      combo
+    });
   };
 
-  // 6. ตรวจจับการชนแป้นบาส (Vertical Plane Backboard)
-  const checkBackboardCollision = () => {
-    if (!ballMesh) return;
-
-    const boardX = hoopGroup.position.x;
-    const boardY = hoopGroup.position.y + 0.475;
-    const boardZ = hoopGroup.position.z;
-
+  // 6. ตรวจจับการชนแป้นบาสเดี่ยว
+  const checkSingleBackboardCollision = (hoop: THREE.Group) => {
     const halfWidth = 0.6;
     const halfHeight = 0.475;
     const thickness = 0.03;
 
-    const localBallPos = ballMesh.position.clone().sub(hoopGroup.position);
-    localBallPos.applyQuaternion(hoopGroup.quaternion.clone().invert());
+    const localBallPos = ballMesh!.position.clone().sub(hoop.position);
+    localBallPos.applyQuaternion(hoop.quaternion.clone().invert());
 
     const withinX = localBallPos.x >= -halfWidth && localBallPos.x <= halfWidth;
     const withinY = localBallPos.y >= 0.475 - halfHeight && localBallPos.y <= 0.475 + halfHeight;
 
     if (withinX && withinY) {
       const collisionLocalZ = thickness / 2 + ballRadius;
-      const localVelocity = ballVelocity.clone().applyQuaternion(hoopGroup.quaternion.clone().invert());
+      const localVelocity = ballVelocity.clone().applyQuaternion(hoop.quaternion.clone().invert());
 
-      // ป้องกันการชนทะลุแผ่นปะทะ (Tunneling): ขยายขีดจำกัดด้านหลังแป้นเป็น -0.5 เมตร สำหรับรอบที่ 2 และ 3 ที่ยิงแรง
       if (localBallPos.z <= collisionLocalZ && localBallPos.z >= -0.5 && localVelocity.z < 0) {
         localBallPos.z = collisionLocalZ;
-        localVelocity.z = -localVelocity.z * 0.75; // เด้งแรงขึ้นจาก 0.55 เป็น 0.75
-        localVelocity.x *= 0.9; // เก็บความเร็วแกน X ไว้มากขึ้น
+        localVelocity.z = -localVelocity.z * 0.75;
+        localVelocity.x *= 0.9;
 
-        ballMesh.position.copy(localBallPos).applyQuaternion(hoopGroup.quaternion).add(hoopGroup.position);
-        ballVelocity.copy(localVelocity).applyQuaternion(hoopGroup.quaternion);
+        ballMesh!.position.copy(localBallPos).applyQuaternion(hoop.quaternion).add(hoop.position);
+        ballVelocity.copy(localVelocity).applyQuaternion(hoop.quaternion);
       }
     }
   };
 
-  // 7. ตรวจจับการชนขอบห่วงแบบวงแหวน (Invisible Ring Hitbox - Torus Collision)
-  const checkRingCollision = () => {
+  const checkBackboardCollision = () => {
     if (!ballMesh) return;
+    if (gameMode === 'multi') {
+      subHoops.forEach(sh => checkSingleBackboardCollision(sh.group));
+    } else {
+      checkSingleBackboardCollision(hoopGroup);
+    }
+  };
 
+  // 7. ตรวจจับการชนขอบห่วงเดี่ยว
+  const checkSingleRingCollision = (hoop: THREE.Group) => {
     const ringLocalOffset = new THREE.Vector3(0, 0.1, 0.35);
-    const ringCenter = ringLocalOffset.clone().applyQuaternion(hoopGroup.quaternion).add(hoopGroup.position);
+    const ringCenter = ringLocalOffset.clone().applyQuaternion(hoop.quaternion).add(hoop.position);
 
-    const ballPos = ballMesh.position;
+    const ballPos = ballMesh!.position;
     const dx = ballPos.x - ringCenter.x;
     const dz = ballPos.z - ringCenter.z;
     const distXZ = Math.sqrt(dx * dx + dz * dz);
@@ -365,12 +549,11 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
       const closestPointOnRing = new THREE.Vector3(closestX, ringCenter.y, closestZ);
 
       const distance3D = ballPos.distanceTo(closestPointOnRing);
-      // ขยายขอบเขตการเช็คชนขอบห่วงเป็น 0.035 เมตร เพื่อรองรับความเร็วและความเล็กของลูกบาสใหม่ไม่ให้ทะลุขอบห่วงในรอบไกลๆ
       const collisionThreshold = ballRadius + 0.035;
 
       if (distance3D < collisionThreshold) {
         const normal = new THREE.Vector3().subVectors(ballPos, closestPointOnRing).normalize();
-        ballMesh.position.copy(closestPointOnRing).addScaledVector(normal, collisionThreshold);
+        ballMesh!.position.copy(closestPointOnRing).addScaledVector(normal, collisionThreshold);
 
         const dot = ballVelocity.dot(normal);
         if (dot < 0) {
@@ -380,14 +563,21 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
     }
   };
 
-  // 8. ตรวจจับการชู้ตทำคะแนน
-  const checkScore = () => {
-    if (!ballMesh || hasScoredThisThrow) return;
+  const checkRingCollision = () => {
+    if (!ballMesh) return;
+    if (gameMode === 'multi') {
+      subHoops.forEach(sh => checkSingleRingCollision(sh.group));
+    } else {
+      checkSingleRingCollision(hoopGroup);
+    }
+  };
 
+  // 8. ตรวจจับการชู้ตทำคะแนนเดี่ยว
+  const checkSingleScore = (hoop: THREE.Group): boolean => {
     const ringLocalOffset = new THREE.Vector3(0, 0.1, 0.35);
-    const ringCenter = ringLocalOffset.clone().applyQuaternion(hoopGroup.quaternion).add(hoopGroup.position);
+    const ringCenter = ringLocalOffset.clone().applyQuaternion(hoop.quaternion).add(hoop.position);
 
-    const ballPos = ballMesh.position;
+    const ballPos = ballMesh!.position;
     const dx = ballPos.x - ringCenter.x;
     const dz = ballPos.z - ringCenter.z;
     const distXZ = Math.sqrt(dx * dx + dz * dz);
@@ -397,13 +587,58 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
     }
 
     if (canScore && ballPos.y <= ringCenter.y && distXZ < ringRadius && ballVelocity.y < 0) {
-      hasScoredThisThrow = true;
       canScore = false;
-      score += 1;
-      if (typeof navigator !== 'undefined' && "vibrate" in navigator && typeof navigator.vibrate === "function") {
-        navigator.vibrate(200); // สั่น 200ms
+      return true;
+    }
+    return false;
+  };
+
+  const handleSuccessfulScore = (multiplier: number) => {
+    hasScoredThisThrow = true;
+    const pointsGained = 1 * multiplier;
+    score += pointsGained;
+
+    if (gameMode === 'time_attack') {
+      combo += 1;
+      const timeBonus = 3 + combo;
+      timeLeft = Math.min(60, timeLeft + timeBonus); // สูงสุดไม่เกิน 60 วินาที
+    }
+
+    if (typeof navigator !== 'undefined' && "vibrate" in navigator && typeof navigator.vibrate === "function") {
+      navigator.vibrate(200);
+    }
+
+    onStateChange({ 
+      score, 
+      status: 'scored',
+      combo,
+      timeLeft,
+      activeHoopMultiplier: multiplier
+    });
+  };
+
+  const checkScore = () => {
+    if (!ballMesh || hasScoredThisThrow) return;
+
+    if (gameMode === 'multi') {
+      for (const sh of subHoops) {
+        if (checkSingleScore(sh.group)) {
+          handleSuccessfulScore(sh.scoreMultiplier);
+          break;
+        }
       }
-      onStateChange({ score, status: 'scored' });
+    } else {
+      if (checkSingleScore(hoopGroup)) {
+        let multiplier = 1;
+        if (gameMode === 'normal') {
+          multiplier = currentRound; // normal: *1, *2, *3
+        } else if (gameMode === 'fade') {
+          multiplier = 2; // fade: *2
+        } else if (gameMode === 'wind') {
+          multiplier = 3; // wind: *3
+        }
+        handleSuccessfulScore(multiplier);
+      }
     }
   };
 
@@ -585,20 +820,41 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
         isDeviceAligned: false,
       });
 
-      // เพิ่มฟังก์ชันสำหรับ React ปรับระดับความยาก
+      // เพิ่มฟังก์ชันสำหรับ React ปรับระดับความยาก (เก็บไว้รองรับหากต้องการ)
       (window as any).setDifficulty = (mode: 'easy' | 'hard') => {
         difficulty = mode;
-        // หากเปลี่ยนกลับเป็น easy ให้เคลียร์ตำแหน่งแป้นกลับมาที่จุดฐานเริ่มต้นทันที
         if (mode === 'easy' && hoopGroup && isHoopPlaced) {
           hoopGroup.position.copy(hoopBasePosition);
         }
       };
 
+      // เพิ่มฟังก์ชันเปลี่ยนโหมดเกม
+      (window as any).setGameMode = (mode: GameMode) => {
+        gameMode = mode;
+        combo = 0;
+        timeLeft = 60;
+        currentRound = 1;
+        score = 0;
+        ballsLeft = mode === 'time_attack' ? 999 : 3;
+
+        if (isHoopPlaced) {
+          spawnHoopForRound(1);
+          resetBall();
+        }
+      };
+
       (window as any)._cleanupBasketball = () => {
-        if (hoopGroup) scene.remove(hoopGroup);
-        if (ballMesh) scene.remove(ballMesh);
+        if (hoopGroup) {
+          scene.remove(hoopGroup);
+        }
+        if (ballMesh) {
+          scene.remove(ballMesh);
+        }
+        clearSubHoops();
         trajectoryPoints.forEach(p => {
-          if (p.parent) p.parent.remove(p);
+          if (p.parent) {
+            p.parent.remove(p);
+          }
         });
         trajectoryPoints = [];
         canvas.removeEventListener('touchstart', handleTouch, true);
@@ -607,6 +863,7 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
         delete (window as any).updateDragging;
         delete (window as any).stopDraggingAndThrow;
         delete (window as any).setDifficulty;
+        delete (window as any).setGameMode;
       };
     },
     onUpdate: () => {
@@ -633,17 +890,79 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
         return;
       }
 
-      // ขยับส่ายแป้นบาสแนวราบช้าๆ ในพิกัด Local XY ของตัวห่วง เมื่อเปิดโหมด HARD
-      if (isHoopPlaced && difficulty === 'hard') {
+      // 2. ปรับการส่ายของแป้นตามโหมด
+      if (isHoopPlaced) {
         const elapsedTime = clock.getElapsedTime();
-        // เคลื่อนที่แบบ Sine/Cosine ส่ายซ้ายขวา 50 ซม. ขึ้นลง 20 ซม. ความเร็วช้าๆ
-        const localOffset = new THREE.Vector3(
-          Math.sin(elapsedTime * 1.0) * 0.5,
-          Math.cos(elapsedTime * 1.3) * 0.2,
-          0
-        );
-        localOffset.applyQuaternion(hoopGroup.quaternion);
-        hoopGroup.position.copy(hoopBasePosition).add(localOffset);
+        
+        if (gameMode === 'multi') {
+          // แกว่งห่วงย่อย 3 แป้น ตามคุณสมบัติเฉพาะตัว
+          subHoops.forEach(sh => {
+            if (sh.amplitude > 0) {
+              const offset = Math.sin(elapsedTime * sh.speed + sh.phase) * sh.amplitude;
+              const localOffset = new THREE.Vector3(offset, 0, 0);
+              localOffset.applyQuaternion(sh.group.quaternion);
+              sh.group.position.copy(sh.basePosition).add(localOffset);
+            }
+          });
+        } else if (gameMode === 'normal' && currentRound === 3) {
+          // โหมดปกติ ด่าน 3 เป้าขยับส่ายแนวราบ
+          const offset = Math.sin(elapsedTime * 1.5) * 0.6;
+          const localOffset = new THREE.Vector3(offset, 0, 0);
+          localOffset.applyQuaternion(hoopGroup.quaternion);
+          hoopGroup.position.copy(hoopBasePosition).add(localOffset);
+        } else if (difficulty === 'hard') {
+          // โหมดดั้งเดิมหากมีคนปรับ
+          const localOffset = new THREE.Vector3(
+            Math.sin(elapsedTime * 1.0) * 0.5,
+            Math.cos(elapsedTime * 1.3) * 0.2,
+            0
+          );
+          localOffset.applyQuaternion(hoopGroup.quaternion);
+          hoopGroup.position.copy(hoopBasePosition).add(localOffset);
+        }
+      }
+
+      // 3. ตรวจจับการลดเวลาสำหรับโหมดถอยหลังต่างๆ
+      if (isHoopPlaced) {
+        if (gameMode === 'fade') {
+          // โหมดแวบหาย: ถอยหลัง 3.5 วินาทีตราบใดที่ยังไม่ชู้ต
+          if (!isBallThrown) {
+            fadeTimer -= dt;
+            const pct = Math.max(0, fadeTimer / 3.5);
+            
+            // เปลี่ยนสีขอบห่วง Indicator
+            const indicator = hoopGroup.getObjectByName("fade-indicator-ring") as THREE.Mesh;
+            if (indicator) {
+              const mat = indicator.material as any;
+              if (pct > 0.6) {
+                mat.color.setHex(0x22c55e); // เขียว
+              } else if (pct > 0.25) {
+                mat.color.setHex(0xeab308); // เหลือง
+              } else {
+                mat.color.setHex(0xef4444); // แดง
+              }
+            }
+
+            onStateChange({ timeLeft: parseFloat(fadeTimer.toFixed(1)) });
+
+            if (fadeTimer <= 0) {
+              // แวบหนีและเกิดใหม่ทันที
+              spawnHoopForRound(currentRound);
+              resetBall();
+            }
+          }
+        } else if (gameMode === 'time_attack') {
+          // โหมดจับเวลาบ้าคลั่ง: นับถอยหลัง 60 วินาที
+          timeLeft -= dt;
+          onStateChange({ timeLeft: Math.max(0, Math.ceil(timeLeft)) });
+          
+          if (timeLeft <= 0) {
+            timeLeft = 0;
+            ballsLeft = 0;
+            onStateChange({ status: 'idle', ballsLeft: 0, currentRound: 3, timeLeft: 0 });
+            return;
+          }
+        }
       }
 
       if (!ballMesh) return;
@@ -651,6 +970,13 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
       if (isBallThrown) {
         // อัปเดตตำแหน่งจากแรงโน้มถ่วง
         ballVelocity.y -= gravity * dt;
+
+        // โหมดแรงลมพัด: พัดเบี่ยงทิศทางลูกบอล
+        if (gameMode === 'wind') {
+          const windForce = windDirection === 'right' ? windSpeed : -windSpeed;
+          ballVelocity.x += windForce * 0.16 * dt; // ความไวการเป่าเบี่ยงลม
+        }
+
         ballMesh.position.addScaledVector(ballVelocity, dt);
 
         // คำนวณการชนและการนับคะแนน
@@ -658,61 +984,91 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
         checkRingCollision();
         checkScore();
 
-        // เช็คการตกพื้นดิน (Y < 0.06)
+        // เช็คการตกพื้นดิน (Y < 0.08)
         if (ballMesh.position.y < ballRadius && ballVelocity.y < 0) {
           if (Math.abs(ballVelocity.y) > 1.2) {
             ballMesh.position.y = ballRadius;
-            ballVelocity.y = -ballVelocity.y * 0.85; // เด้งพื้นสูงขึ้นอย่างเห็นได้ชัด (จากเดิม 0.45)
-            ballVelocity.x *= 0.95; // ลดการเสียความเร็วเฉือน X (จาก 0.6)
-            ballVelocity.z *= 0.95; // ลดการเสียความเร็วเฉลบ Z (จาก 0.6) เพื่อให้บอลเด้งกลับมาหาตัวผู้เล่นได้ใกล้ขึ้น
+            ballVelocity.y = -ballVelocity.y * 0.85; // เด้งพื้น
+            ballVelocity.x *= 0.95;
+            ballVelocity.z *= 0.95;
           } else {
             ballVelocity.set(0, 0, 0);
             if (!hasScoredThisThrow) {
               onStateChange({ status: 'missed' });
+              if (gameMode === 'time_attack') {
+                combo = 0;
+                onStateChange({ combo });
+              }
             }
             isBallThrown = false;
 
-            ballsLeft -= 1;
-
-            setTimeout(() => {
-              if (ballsLeft <= 0) {
-                if (currentRound < 3) {
-                  currentRound += 1;
-                  ballsLeft = 3;
-                  spawnHoopForRound(currentRound);
-                  resetBall();
-                } else {
-                  // สิ้นสุด 3 รอบ เล่นจบแล้ว!
-                  ballsLeft = 0;
-                  onStateChange({ status: 'idle', ballsLeft: 0, currentRound: 3 });
-                }
-              } else {
+            // จัดการสลับลูกบอล
+            if (gameMode === 'time_attack') {
+              setTimeout(() => {
                 resetBall();
-              }
-            }, 1200);
+              }, 400);
+            } else if (gameMode === 'fade') {
+              // แวบสปอว์นจุดใหม่หลังโยน
+              setTimeout(() => {
+                spawnHoopForRound(currentRound);
+                resetBall();
+              }, 800);
+            } else {
+              ballsLeft -= 1;
+              setTimeout(() => {
+                if (ballsLeft <= 0) {
+                  if (currentRound < 3) {
+                    currentRound += 1;
+                    ballsLeft = 3;
+                    spawnHoopForRound(currentRound);
+                    resetBall();
+                  } else {
+                    ballsLeft = 0;
+                    onStateChange({ status: 'idle', ballsLeft: 0, currentRound: 3 });
+                  }
+                } else {
+                  resetBall();
+                }
+              }, 1200);
+            }
           }
         }
 
-        // หลุดขอบเขตออกไปไกลเกินไป (รอบ 3 อยู่ Z = -5.0 เมตร ให้ Z หลุดขอบเขตไกลขึ้น)
+        // หลุดขอบเขตออกไปไกลเกินไป
         if (ballMesh.position.y < -3.0 || ballMesh.position.z < -12.0 || ballMesh.position.z > 5.0) {
           if (!hasScoredThisThrow) {
             onStateChange({ status: 'missed' });
+            if (gameMode === 'time_attack') {
+              combo = 0;
+              onStateChange({ combo });
+            }
           }
           isBallThrown = false;
-          ballsLeft -= 1;
 
-          if (ballsLeft <= 0) {
-            if (currentRound < 3) {
-              currentRound += 1;
-              ballsLeft = 3;
+          if (gameMode === 'time_attack') {
+            setTimeout(() => {
+              resetBall();
+            }, 400);
+          } else if (gameMode === 'fade') {
+            setTimeout(() => {
               spawnHoopForRound(currentRound);
               resetBall();
-            } else {
-              ballsLeft = 0;
-              onStateChange({ status: 'idle', ballsLeft: 0, currentRound: 3 });
-            }
+            }, 800);
           } else {
-            resetBall();
+            ballsLeft -= 1;
+            if (ballsLeft <= 0) {
+              if (currentRound < 3) {
+                currentRound += 1;
+                ballsLeft = 3;
+                spawnHoopForRound(currentRound);
+                resetBall();
+              } else {
+                ballsLeft = 0;
+                onStateChange({ status: 'idle', ballsLeft: 0, currentRound: 3 });
+              }
+            } else {
+              resetBall();
+            }
           }
         }
       } else {
@@ -732,10 +1088,10 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
         ballMesh.rotateY(1.0 * dt);
         ballMesh.rotateX(0.5 * dt);
 
-        // อัปเดตและเรนเดอร์เส้นไกด์วิถีโค้งที่ 60fps ในลูปหลัก เพื่อให้หันตามมุมกล้องเรียลไทม์
+        // อัปเดตและเรนเดอร์เส้นไกด์วิถีโค้ง
         if (isDragging && trajectoryPoints.length > 0) {
           const maxPoints = 20;
-          const simDt = 0.065; // ระยะเวลาในการจำลองแต่ละจุดเพื่อให้วิถีโค้งกำลังดี
+          const simDt = 0.065;
 
           const tempPos = new THREE.Vector3();
           ballMesh.getWorldPosition(tempPos);
@@ -749,9 +1105,13 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
             activeCount++;
 
             tempVel.y -= gravity * simDt;
+            // คำนวณเบี่ยงวิถีโค้งจากลมในโหมดแรงลมด้วย
+            if (gameMode === 'wind') {
+              const windForce = windDirection === 'right' ? windSpeed : -windSpeed;
+              tempVel.x += windForce * 0.16 * simDt;
+            }
             tempPos.addScaledVector(tempVel, simDt);
 
-            // หากความเร็วตกดิ่งมากไป หรือ ตกต่ำกว่าระดับพื้นดิน ให้หยุดวาดต่อ
             if (tempVel.y < -3.0 || tempPos.y < 0) {
               break;
             }
