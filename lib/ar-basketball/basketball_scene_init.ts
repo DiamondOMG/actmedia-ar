@@ -304,13 +304,23 @@ export const initBasketballScenePipelineModule = (initialMode: GameMode, onState
 
         if (isGolden) {
           clonedGroup.traverse((child: any) => {
-            if (child.isMesh) {
-              child.material = child.material.clone();
-              child.material.color.setHex(0xffb700);
-              child.material.metalness = 0.95;
-              child.material.roughness = 0.05;
-              if (child.name === 'net' || child.name === 'fallback-hoop') {
-                child.material.color.setHex(0xffd700);
+            if (child.isMesh && child.material) {
+              // ฟังก์ชันแปลงเป็นแป้นสีทองแบบปลอดภัยสำหรับ Multi-material
+              const applyGolden = (mat: any) => {
+                const clonedMat = mat.clone();
+                clonedMat.color.setHex(0xffb700);
+                clonedMat.metalness = 0.95;
+                clonedMat.roughness = 0.05;
+                if (child.name === 'net' || child.name === 'fallback-hoop') {
+                  clonedMat.color.setHex(0xffd700);
+                }
+                return clonedMat;
+              };
+
+              if (Array.isArray(child.material)) {
+                child.material = child.material.map((m: any) => applyGolden(m));
+              } else {
+                child.material = applyGolden(child.material);
               }
             }
           });
