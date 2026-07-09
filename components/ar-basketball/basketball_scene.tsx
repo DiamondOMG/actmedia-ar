@@ -41,7 +41,7 @@ export default function BasketballScene() {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const modeParam = params.get("mode") as GameMode;
-      if (modeParam && ["normal", "fade", "multi", "wind", "time_attack"].includes(modeParam)) {
+      if (modeParam && ["normal", "fade", "multi", "wind"].includes(modeParam)) {
         setGameMode(modeParam);
       }
       setModeLoaded(true);
@@ -273,7 +273,7 @@ export default function BasketballScene() {
                 >
                   <div>
                     <div className="font-bold text-sm">⚡ โหมดแวบหาย (Fade)</div>
-                    <div className="text-[10px] text-slate-400 font-sans">จำกัด 3.5 วิ แป้นสุ่มเทเลพอร์ต</div>
+                    <div className="text-[10px] text-slate-400 font-sans">จำกัด 1.5 วิ แป้นสุ่มเทเลพอร์ต</div>
                   </div>
                   <Timer className="h-4 w-4 text-purple-400" />
                 </button>
@@ -288,7 +288,7 @@ export default function BasketballScene() {
                 >
                   <div>
                     <div className="font-bold text-sm">🔱 โหมดหลายแป้น (Multi-Hoop)</div>
-                    <div className="text-[10px] text-slate-400 font-sans">3 ระยะพร้อมกัน / ลุ้นแป้นทอง *5</div>
+                    <div className="text-[10px] text-slate-400 font-sans">60 วิแป้นขยับทั้งหมด / ยิงแล้วหาย</div>
                   </div>
                   <Compass className="h-4 w-4 text-purple-400" />
                 </button>
@@ -303,30 +303,15 @@ export default function BasketballScene() {
                 >
                   <div>
                     <div className="font-bold text-sm">💨 แรงลมท้าทาย (Wind)</div>
-                    <div className="text-[10px] text-slate-400 font-sans">ลมพัดเบี่ยงทิศทางลูกบาส</div>
+                    <div className="text-[10px] text-slate-400 font-sans">ลมพัดแรง 3 เท่า / ไร้เส้นประนำทาง</div>
                   </div>
                   <Wind className="h-4 w-4 text-purple-400" />
-                </button>
-
-                <button
-                  onClick={() => selectMode("time_attack")}
-                  className={`w-full p-3 rounded-xl border text-left transition flex items-center justify-between ${
-                    gameMode === "time_attack"
-                      ? "bg-purple-600/20 border-purple-500 text-white"
-                      : "bg-white/5 border-white/5 hover:bg-white/10 text-slate-300"
-                  }`}
-                >
-                  <div>
-                    <div className="font-bold text-sm">🔥 จับเวลาบ้าคลั่ง (Time Attack)</div>
-                    <div className="text-[10px] text-slate-400 font-sans">60 วิไม่จำกัดบอล ยิงคอมโบเพิ่มเวลา</div>
-                  </div>
-                  <Timer className="h-4 w-4 text-purple-400" />
                 </button>
               </div>
             </div>
 
             <div className="text-[10px] text-slate-500 font-mono text-center">
-              AR Basketball Mode Selector v2.0
+              AR Basketball Mode Selector v2.1
             </div>
           </div>
           <div className="flex-1" onClick={() => setIsMenuOpen(false)}></div>
@@ -340,9 +325,8 @@ export default function BasketballScene() {
             <span className="text-[10px] text-purple-400 font-black tracking-wide uppercase font-sans">
               {gameMode === "normal" && "🏆 Normal Mode"}
               {gameMode === "fade" && "⚡ Fade Mode"}
-              {gameMode === "multi" && "🔱 Multi-Hoop Mode"}
+              {gameMode === "multi" && "🔱 Multi-Hoop Timed"}
               {gameMode === "wind" && "💨 Wind Challenge"}
-              {gameMode === "time_attack" && "🔥 Time Attack"}
             </span>
             <div className="flex items-center gap-1.5 font-bold">
               {gameMode === "normal" && (
@@ -354,24 +338,24 @@ export default function BasketballScene() {
               <span className="text-amber-400 text-sm">{gameState.score} PTS</span>
               <span className="text-white/30">|</span>
               <span className="text-slate-300">
-                {gameMode === "time_attack" ? "∞" : `${gameState.ballsLeft}`} 🏀
+                {gameMode === "multi" ? "∞" : `${gameState.ballsLeft}`} 🏀
               </span>
             </div>
           </div>
 
           <div className="flex flex-col items-end gap-1.5">
-            {/* โหมดแวบหาย: แสดงเวลาถอยหลัง 3.5 วินาทีของห่วงปัจจุบัน */}
+            {/* โหมดแวบหาย: แสดงเวลาถอยหลัง 1.5 วินาทีของห่วงปัจจุบัน */}
             {gameMode === "fade" && gameState.status === "idle" && (
               <div className="rounded-xl bg-black/70 backdrop-blur-sm border border-white/15 px-3 py-1.5 text-white font-mono text-xs flex items-center gap-1.5">
                 <Timer className="h-3.5 w-3.5 text-amber-400 animate-pulse" />
                 <span className="font-extrabold text-amber-400">
-                  {gameState.timeLeft !== undefined ? gameState.timeLeft.toFixed(1) : "3.5"}s
+                  {gameState.timeLeft !== undefined ? gameState.timeLeft.toFixed(1) : "1.5"}s
                 </span>
               </div>
             )}
 
-            {/* โหมดจับเวลาบ้าคลั่ง: แสดงตัวเลขนับถอยหลังตัวโตๆ */}
-            {gameMode === "time_attack" && (
+            {/* โหมดหลายแป้นแบบจำกัดเวลา: แสดงตัวเลขนับถอยหลังตัวโตๆ */}
+            {gameMode === "multi" && (
               <div className="rounded-xl bg-red-600/80 border border-red-500/30 px-3 py-1.5 text-white font-mono text-xs flex items-center gap-1.5 shadow-lg">
                 <Timer className="h-3.5 w-3.5 animate-spin" />
                 <span className="font-black text-sm">
@@ -393,15 +377,6 @@ export default function BasketballScene() {
         </div>
       )}
 
-      {/* ───────── ป้าย Combo ขนาดใหญ่ (สำหรับโหมด Time Attack) ───────── */}
-      {gameMode === "time_attack" && gameState.combo !== undefined && gameState.combo > 0 && (
-        <div className="absolute top-20 left-0 right-0 z-10 pointer-events-none flex justify-center animate-bounce">
-          <div className="rounded-full bg-gradient-to-r from-amber-500 to-orange-600 border-2 border-white px-4 py-1 text-white font-extrabold text-xs shadow-lg tracking-wider font-mono">
-            🔥 COMBO x{gameState.combo} (+{gameState.combo + 3}s)
-          </div>
-        </div>
-      )}
-
       {/* ข้อความแสดงสถานะชู้ตจังหวะ scored / missed */}
       {showStatus && (
         <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
@@ -410,11 +385,11 @@ export default function BasketballScene() {
             <div className="flex flex-col items-center justify-center p-2.5 bg-[#4a4a4a] border-4 border-[#c0c0c0] rounded-[28px] w-[260px] shadow-2xl animate-in zoom-in-95 duration-200">
               <div className="flex items-center justify-between w-full bg-[#1b1b1b] rounded-2xl px-4 py-2 border border-[#2b2b2b] mb-2">
                 <span className="text-xl font-extrabold italic tracking-widest text-white drop-shadow-[1px_1px_2px_rgba(0,0,0,0.8)] font-sans">
-                  {gameMode === "time_attack" ? "ATTACK" : "GUEST"}
+                  {gameMode === "multi" ? "ATTACK" : "GUEST"}
                 </span>
                 <div className="bg-[#0c0c0c] border border-[#222] rounded-lg px-2.5 py-1">
                   <span className="text-red-500 font-mono text-xs font-bold tracking-widest drop-shadow-[0_0_4px_rgba(239,68,68,0.9)]">
-                    {gameMode === "time_attack" 
+                    {gameMode === "multi" 
                       ? `00:${String(gameState.timeLeft || 0).padStart(2, "0")}`
                       : "01:00"
                     }
@@ -468,14 +443,13 @@ export default function BasketballScene() {
               {gameMode === "fade" && "โหมดแวบหาย (Fade)"}
               {gameMode === "multi" && "โหมดหลายแป้น (Multi-Hoop)"}
               {gameMode === "wind" && "โหมดแรงลม (Wind Challenge)"}
-              {gameMode === "time_attack" && "โหมดจับเวลาบ้าคลั่ง (Time Attack)"}
             </p>
 
             <div className="bg-white/5 rounded-2xl p-4 border border-white/5 mb-6 font-sans">
               <div className="text-sm text-slate-400 mb-1">คะแนนรวมสุทธิ</div>
               <div className="text-5xl font-black text-amber-400 font-mono leading-none mb-1">{gameState.score}</div>
               <div className="text-[10px] text-slate-500">
-                {gameMode === "time_attack" 
+                {gameMode === "multi" 
                   ? "หมดเวลา 60 วินาที" 
                   : "ยิงสำเร็จจากโอกาสทั้งหมดที่มี"
                 }
