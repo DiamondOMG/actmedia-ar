@@ -29,6 +29,9 @@ export default function BasketballScene() {
   const [modeLoaded, setModeLoaded] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
+  // ควบคุมประเภทของป๊อปอัพเพื่อแยกต่างหากจากสถานะหลัก ป้องกันการกระพริบสลับร่าง
+  const [popupType, setPopupType] = useState<"scored" | "missed" | null>(null);
+
   const toggleDifficulty = (mode: "easy" | "hard") => {
     setDifficulty(mode);
     if (typeof window !== "undefined" && (window as any).setDifficulty) {
@@ -58,22 +61,31 @@ export default function BasketballScene() {
 
   const isDraggingRef = useRef<boolean>(false);
 
-  // เอฟเฟกต์แสดงข้อความสถานะการชู้ต (Scored/Missed) และแก้ไขบั๊กป๊อปอัพขึ้นค้าง
+  // เอฟเฟกต์แสดงข้อความสถานะการชู้ตและล้างป๊อปอัพทันทีเมื่อเปลี่ยนสถานะเป้าหมาย
   useEffect(() => {
     if (gameState.status === "scored") {
       const multText = gameState.activeHoopMultiplier && gameState.activeHoopMultiplier > 1 
         ? ` (x${gameState.activeHoopMultiplier})` 
         : "";
       setShowStatus(`🏀 SCORED! +${gameState.activeHoopMultiplier || 1}${multText}`);
-      const timer = setTimeout(() => setShowStatus(null), 900);
+      setPopupType("scored");
+      const timer = setTimeout(() => {
+        setShowStatus(null);
+        setPopupType(null);
+      }, 900);
       return () => clearTimeout(timer);
     } else if (gameState.status === "missed") {
       setShowStatus("❌ MISSED");
-      const timer = setTimeout(() => setShowStatus(null), 500);
+      setPopupType("missed");
+      const timer = setTimeout(() => {
+        setShowStatus(null);
+        setPopupType(null);
+      }, 500);
       return () => clearTimeout(timer);
     } else if (gameState.status === "idle" || gameState.status === "aiming") {
-      // เคลียร์ป๊อปอัพทันทีที่เกิดลูกบอลใหม่พร้อมชู้ต ป้องกันป้ายค้าง
+      // เมื่อเกิดลูกบาสเก็ตบอลใหม่ ล้างสถานะป๊อปอัพและชนิดป๊อปอัพทันทีเพื่อป้องกันภาพค้าง/กระพริบ
       setShowStatus(null);
+      setPopupType(null);
     }
   }, [gameState.status, gameState.activeHoopMultiplier]);
 
@@ -101,7 +113,6 @@ export default function BasketballScene() {
         XRExtras.AlmostThere.pipelineModule(),
         XRExtras.FullWindowCanvas.pipelineModule(),
         XRExtras.RuntimeError.pipelineModule(),
-        // ส่ง gameMode เข้าเป็น Parameter เพื่อให้ initialize ตรรกะของโหมดนั้นโดยตรง
         initBasketballScenePipelineModule(gameMode, (updatedState) => {
           setGameState((prev) => ({ ...prev, ...updatedState }));
         }),
@@ -349,7 +360,7 @@ export default function BasketballScene() {
           </div>
 
           <div className="flex flex-col items-end gap-1.5">
-            {/* โหมดจำกัดเวลา (multi และ fade): แสดงตัวเลขนับถอยหลัง 60 วินาทีรวมของโหมด */}
+            {/* โหมดจำกัดเวลา (multi และ fade): แสดงเวลาถอยหลัง 60 วินาทีรวม */}
             {isTimedMode && (
               <div className="rounded-xl bg-red-600/80 border border-red-500/30 px-3 py-1.5 text-white font-mono text-xs flex items-center gap-1.5 shadow-lg">
                 <Timer className="h-3.5 w-3.5 animate-spin" />
@@ -372,12 +383,12 @@ export default function BasketballScene() {
         </div>
       )}
 
-      {/* ข้อความแสดงสถานะชู้ตจังหวะ scored / missed */}
-      {showStatus && (
+      {/* ข้อความแสดงสถานะชู้ตจังหวะ scored / missed (ใช้ popupType หลีกเลี่ยงภาพแวบสลับสเปกตรัม) */}
+      {popupType && showStatus && (
         <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
-          {gameState.status === "scored" ? (
+          {popupType === "scored" ? (
             /* LED Scoreboard Popup (เนียนสไตล์บอร์ดจริง) */
-            <div className="flex flex-col items-center justify-center p-2.5 bg-[#4a4a4a] border-4 border-[#c0c0c0] rounded-[28px] w-[260px] shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="flex flex-col items-center justify-center p-2.5 bg-[#4a4a4a] border-4 border-[#c0c0c0] rounded-[28px] w-[260px] shadow-2xl animate-in zoom-in-95 duration-200 font-sans">
               <div className="flex items-center justify-between w-full bg-[#1b1b1b] rounded-2xl px-4 py-2 border border-[#2b2b2b] mb-2">
                 <span className="text-xl font-extrabold italic tracking-widest text-white drop-shadow-[1px_1px_2px_rgba(0,0,0,0.8)] font-sans">
                   {isTimedMode ? "ATTACK" : "GUEST"}
