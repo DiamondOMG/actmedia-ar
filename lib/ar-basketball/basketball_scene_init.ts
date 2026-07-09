@@ -76,8 +76,8 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
   let difficulty: 'easy' | 'hard' = 'easy';
   const hoopBasePosition = new THREE.Vector3();
 
-  const ballRadius = 0.06; // hitbox radius (เมตร)
-  const ballModelScale = 0.062; // สเกลลูกเก่า
+  const ballRadius = 0.11; // hitbox radius (เมตร)
+  const ballModelScale = 0.115; // สเกลลูกใหม่สัมพันธ์กับขนาดรัศมี
   const ringRadius = 0.28;
   const gravity = 9.81;
 
@@ -335,8 +335,8 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
       // ป้องกันการชนทะลุแผ่นปะทะ (Tunneling): ขยายขีดจำกัดด้านหลังแป้นเป็น -0.5 เมตร สำหรับรอบที่ 2 และ 3 ที่ยิงแรง
       if (localBallPos.z <= collisionLocalZ && localBallPos.z >= -0.5 && localVelocity.z < 0) {
         localBallPos.z = collisionLocalZ;
-        localVelocity.z = -localVelocity.z * 0.55;
-        localVelocity.x *= 0.8;
+        localVelocity.z = -localVelocity.z * 0.75; // เด้งแรงขึ้นจาก 0.55 เป็น 0.75
+        localVelocity.x *= 0.9; // เก็บความเร็วแกน X ไว้มากขึ้น
 
         ballMesh.position.copy(localBallPos).applyQuaternion(hoopGroup.quaternion).add(hoopGroup.position);
         ballVelocity.copy(localVelocity).applyQuaternion(hoopGroup.quaternion);
@@ -662,9 +662,9 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
         if (ballMesh.position.y < ballRadius && ballVelocity.y < 0) {
           if (Math.abs(ballVelocity.y) > 1.2) {
             ballMesh.position.y = ballRadius;
-            ballVelocity.y = -ballVelocity.y * 0.45; // เด้งพื้นเบาๆ
-            ballVelocity.x *= 0.6;
-            ballVelocity.z *= 0.6;
+            ballVelocity.y = -ballVelocity.y * 0.65; // เด้งพื้นสูงขึ้นอย่างเห็นได้ชัด (จากเดิม 0.45)
+            ballVelocity.x *= 0.85; // ลดการเสียความเร็วเฉือน X (จาก 0.6)
+            ballVelocity.z *= 0.85; // ลดการเสียความเร็วเฉลบ Z (จาก 0.6) เพื่อให้บอลเด้งกลับมาหาตัวผู้เล่นได้ใกล้ขึ้น
           } else {
             ballVelocity.set(0, 0, 0);
             if (!hasScoredThisThrow) {
