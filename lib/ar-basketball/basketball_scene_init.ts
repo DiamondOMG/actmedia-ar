@@ -36,9 +36,65 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
   let hasScoredThisThrow = false;
   let canScore = false; // ตรวจสอบว่าผ่านห่วงจากบนลงล่างเท่านั้น
 
-  // ตัวแปรสำหรับการเล็งในลูป update
-  let isAiming = false;
-  let currentDy = 0;
+  // ponytail: variables for flick-to-shoot dragging state and velocity tracking
+  let isDragging = false;
+  let dragHistory: { pos: THREE.Vector3; time: number }[] = [];
+  const currentDragPos = new THREE.Vector3();
+  const expectedVelocity = new THREE.Vector3();
+
+  const getProjectedPosition = (clientX: number, clientY: number, activeCamera: THREE.Camera): THREE.Vector3 => {
+    const ndc = new THREE.Vector2(
+      (clientX / window.innerWidth) * 2 - 1,
+      -(clientY / window.innerHeight) * 2 + 1
+    );
+
+    const normal = new THREE.Vector3(0, 0, 1).applyQuaternion(activeCamera.quaternion);
+    const coplanarPoint = new THREE.Vector3(0, -0.15, -0.4).applyQuaternion(activeCamera.quaternion).add(activeCamera.position);
+    
+    const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, coplanarPoint);
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(ndc, activeCamera);
+    
+    const targetPos = new THREE.Vector3();
+    raycaster.ray.intersectPlane(plane, targetPos);
+    return targetPos;
+  };
+
+  const calculateExpectedVelocity = (activeCamera: THREE.Camera) => {
+    if (dragHistory.length < 2) {
+      expectedVelocity.set(0, 0, 0);
+      return;
+    }
+    
+    const oldest = dragHistory[0];
+    const newest = dragHistory[dragHistory.length - 1];
+    const dt = (newest.time - oldest.time) / 1000.0;
+    
+    if (dt <= 0) {
+      expectedVelocity.set(0, 0, 0);
+      return;
+    }
+    
+    const deltaWorld = new THREE.Vector3().subVectors(newest.pos, oldest.pos);
+    const deltaLocal = deltaWorld.clone().applyQuaternion(activeCamera.quaternion.clone().invert());
+    
+    const vxLocal = deltaLocal.x / dt;
+    const vyLocal = deltaLocal.y / dt;
+    
+    // สเกลและจำกัดแรงยิงซ้าย-ขวา (ไม่ให้เอียงเว่อร์ไป)
+    // ponytail: clamp local x velocity to prevent extreme diagonal shots
+    let tx = vxLocal * 0.8;
+    tx = Math.max(-4.0, Math.min(4.0, tx));
+    
+    // ความแรงการปัดแนวตั้ง (vyLocal) ส่งผลให้บอลลอยขึ้น (Y) และพุ่งไปข้างหน้า (Z)
+    const speedRatio = Math.max(0.0, Math.min(1.0, vyLocal / 5.0));
+    
+    const ty = 2.0 + speedRatio * 6.5; // 2.0 ถึง 8.5 m/s
+    const tz = -2.0 - speedRatio * 8.5; // -2.0 ถึง -10.5 m/s
+    
+    const localVelocity = new THREE.Vector3(tx, ty, tz);
+    expectedVelocity.copy(localVelocity).applyQuaternion(activeCamera.quaternion);
+  };
 
   // ตัวแปรปรับระดับความยาก Easy/Hard และตำแหน่งฐานแป้นบาส
   let difficulty: 'easy' | 'hard' = 'easy';
@@ -365,20 +421,7 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
     }
   };
 
-  // ฟังก์ชันคำนวณเวกเตอร์ความเร็วจากระยะการลากแกน Y
-  const getVelocityFromDy = (dy: number, camera: any): THREE.Vector3 => {
-    const maxDy = window.innerHeight * 0.5;
-    const cleanDy = Math.max(dy, 0);
-    const ratio = Math.min(cleanDy / maxDy, 1.0);
 
-    const tX = 0;
-    // ปรับสเกลแรงยิงให้เริ่มต้นจากน้อยมากๆ (เมื่อแค่แตะ ratio = 0) และขยายขึ้นตามสัดส่วนการลาก
-    const tY = 1.0 + ratio * 7.5;   // ช่วง 1.0 ถึง 8.5 m/s
-    const tZ = -1.0 - ratio * 8.0;  // ช่วง -1.0 ถึง -9.0 m/s
-
-    const localVelocity = new THREE.Vector3(tX, tY, tZ);
-    return localVelocity.applyQuaternion(camera.quaternion);
-  };
 
   return {
     name: 'basketball-scene-init',
@@ -490,33 +533,47 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
         onStateChange({ status: 'thrown' });
       };
 
-      // เพิ่มฟังก์ชันสำหรับ React สั่งเปิดระบบเล็ง
-      (window as any).startAiming = () => {
-        isAiming = true;
-        currentDy = 0;
-      };
-
-      // อัปเดตระยะลากนิ้วระหว่างเล็ง
-      (window as any).updateAimingDy = (dy: number) => {
-        currentDy = dy;
-      };
-
-      // สั่งปิดระบบเล็งและซ่อนเส้นไกด์
-      (window as any).stopAiming = () => {
-        isAiming = false;
-        trajectoryPoints.forEach(p => {
-          p.visible = false;
-        });
-      };
-
-      // ฟังก์ชันสำหรับดึงเวกเตอร์ยิงอ้างอิง
-      (window as any).getShootVelocity = (dy: number) => {
+      // ฟังก์ชันลากบอลรอบการชู้ตแบบใหม่
+      (window as any).startDragging = (clientX: number, clientY: number) => {
         const { camera: activeCamera } = XR8.Threejs.xrScene();
-        return getShootVelocityFromWindow(dy, activeCamera);
+        if (!activeCamera) return;
+
+        isDragging = true;
+        dragHistory = [];
+
+        const pos = getProjectedPosition(clientX, clientY, activeCamera);
+        currentDragPos.copy(pos);
+        dragHistory.push({ pos: pos.clone(), time: Date.now() });
       };
 
-      const getShootVelocityFromWindow = (dy: number, activeCamera: any) => {
-        return getVelocityFromDy(dy, activeCamera);
+      (window as any).updateDragging = (clientX: number, clientY: number) => {
+        const { camera: activeCamera } = XR8.Threejs.xrScene();
+        if (!activeCamera) return;
+
+        const pos = getProjectedPosition(clientX, clientY, activeCamera);
+        currentDragPos.copy(pos);
+
+        const now = Date.now();
+        dragHistory.push({ pos: pos.clone(), time: now });
+
+        // เก็บประวัติช่วงสั้น 150ms ท้ายก่อนปล่อย
+        dragHistory = dragHistory.filter(h => now - h.time <= 150);
+
+        calculateExpectedVelocity(activeCamera);
+      };
+
+      (window as any).stopDraggingAndThrow = (clientX: number, clientY: number) => {
+        isDragging = false;
+        trajectoryPoints.forEach(p => { p.visible = false; });
+
+        const { camera: activeCamera } = XR8.Threejs.xrScene();
+        if (!activeCamera || isBallThrown || ballsLeft <= 0 || !isHoopPlaced) return;
+
+        calculateExpectedVelocity(activeCamera);
+
+        ballVelocity.copy(expectedVelocity);
+        isBallThrown = true;
+        onStateChange({ status: 'thrown' });
       };
 
       // เริ่มต้นสถานะเกม (ยังไม่เสกห่วงบาส รอปรับระนาบมือถือ)
@@ -553,10 +610,9 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
         trajectoryPoints = [];
         canvas.removeEventListener('touchstart', handleTouch, true);
         delete (window as any).throwBasketball;
-        delete (window as any).startAiming;
-        delete (window as any).updateAimingDy;
-        delete (window as any).stopAiming;
-        delete (window as any).getShootVelocity;
+        delete (window as any).startDragging;
+        delete (window as any).updateDragging;
+        delete (window as any).stopDraggingAndThrow;
         delete (window as any).setDifficulty;
       };
     },
@@ -667,23 +723,27 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
           }
         }
       } else {
-        // ซิงก์ตำแหน่งลูกบอลให้อยู่ติดกับกล้อง (เสมือนผู้ใช้ถือไว้เพื่อพร้อมปัดชู้ต)
-        const offset = new THREE.Vector3(0, -0.15, -0.4);
-        offset.applyQuaternion(camera.quaternion);
-        ballMesh.position.copy(camera.position).add(offset);
+        if (isDragging) {
+          // ลากนิ้วไปไหน ลูกบอลค่อยๆ ตามไป
+          ballMesh.position.lerp(currentDragPos, 0.3);
+        } else {
+          // ซิงก์ตำแหน่งลูกบอลให้อยู่ติดกับกล้อง (เสมือนผู้ใช้ถือไว้เพื่อพร้อมปัดชู้ต)
+          const offset = new THREE.Vector3(0, -0.15, -0.4);
+          offset.applyQuaternion(camera.quaternion);
+          ballMesh.position.copy(camera.position).add(offset);
+        }
 
         // หมุนลูกบอลช้าๆ ขณะรอการชู้ตเพื่อความสมจริง
         ballMesh.rotateY(1.0 * dt);
         ballMesh.rotateX(0.5 * dt);
 
         // อัปเดตและเรนเดอร์เส้นไกด์วิถีโค้งที่ 60fps ในลูปหลัก เพื่อให้หันตามมุมกล้องเรียลไทม์
-        if (isAiming && trajectoryPoints.length > 0) {
-          const worldVelocity = getVelocityFromDy(currentDy, camera);
+        if (isDragging && trajectoryPoints.length > 0) {
           const maxPoints = 20;
           const simDt = 0.065; // ระยะเวลาในการจำลองแต่ละจุดเพื่อให้วิถีโค้งกำลังดี
 
           const tempPos = new THREE.Vector3().copy(ballMesh.position);
-          const tempVel = new THREE.Vector3().copy(worldVelocity);
+          const tempVel = new THREE.Vector3().copy(expectedVelocity);
           let activeCount = 0;
 
           for (let i = 0; i < maxPoints; i++) {

@@ -31,7 +31,7 @@ export default function BasketballScene() {
     }
   };
 
-  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
+  const isDraggingRef = useRef<boolean>(false);
 
   // เอฟเฟกต์แสดงข้อความสถานะ (เช่น Scored!, Missed!)
   useEffect(() => {
@@ -97,57 +97,37 @@ export default function BasketballScene() {
     window.location.reload();
   };
 
-  // ตรวจจับการเริ่มสัมผัสหน้าจอ
+  // ตรวจจับการเริ่มสัมผัสหน้าจอเพื่อเริ่มลากลูกบอล
   const handleTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
     if (e.touches.length === 1 && gameState.status === "idle" && gameState.isHoopPlaced) {
       const touch = e.touches[0];
-      touchStartRef.current = {
-        x: touch.clientX,
-        y: touch.clientY,
-        time: Date.now(),
-      };
-      // เปิดระบบเล็งและเรนเดอร์เส้นวิถี 60fps ทันที
-      if (typeof window !== "undefined" && (window as any).startAiming) {
-        (window as any).startAiming();
+      isDraggingRef.current = true;
+      if (typeof window !== "undefined" && (window as any).startDragging) {
+        (window as any).startDragging(touch.clientX, touch.clientY);
       }
     }
   };
 
-  // ตรวจจับการลากนิ้วเพื่ออัปเดตระยะลากของการเล็ง
+  // ตรวจจับการลากนิ้วเพื่อย้ายลูกบอลตาม
   const handleTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
-    if (!touchStartRef.current || gameState.status !== "idle" || !gameState.isHoopPlaced) return;
+    if (!isDraggingRef.current || gameState.status !== "idle" || !gameState.isHoopPlaced) return;
 
     if (e.touches.length === 1) {
       const touch = e.touches[0];
-      const rawDy = touchStartRef.current.y - touch.clientY; // ลากขึ้น dy จะเป็นบวก
-      const dy = Math.max(rawDy, 0); // ไม่ให้แรงต่ำกว่า 0
-
-      if (typeof window !== "undefined" && (window as any).updateAimingDy) {
-        (window as any).updateAimingDy(dy);
+      if (typeof window !== "undefined" && (window as any).updateDragging) {
+        (window as any).updateDragging(touch.clientX, touch.clientY);
       }
     }
   };
 
-  // ตรวจจับการปล่อยนิ้วและโยนลูกบาสตามระยะทาง Y ในทุกกรณี (Release to Shoot)
+  // ตรวจจับการปล่อยนิ้วเพื่อคำนวณเวกเตอร์ความเร็วและชู้ต
   const handleTouchEnd = (e: React.TouchEvent<HTMLCanvasElement>) => {
-    if (!touchStartRef.current || gameState.status !== "idle" || !gameState.isHoopPlaced) return;
+    if (!isDraggingRef.current || gameState.status !== "idle" || !gameState.isHoopPlaced) return;
 
+    isDraggingRef.current = false;
     const touch = e.changedTouches[0];
-    const rawDy = touchStartRef.current.y - touch.clientY; // ลากขึ้น dy จะเป็นบวก
-    const dy = Math.max(rawDy, 0); // ไม่ให้แรงต่ำกว่า 0
-
-    touchStartRef.current = null;
-
-    // สั่งปิดระบบเล็งและซ่อนเส้นวิถี
-    if (typeof window !== "undefined" && (window as any).stopAiming) {
-      (window as any).stopAiming();
-    }
-
-    if (typeof window !== "undefined" && (window as any).throwBasketball && (window as any).getShootVelocity) {
-      const worldVelocity = (window as any).getShootVelocity(dy);
-      if (worldVelocity) {
-        (window as any).throwBasketball(worldVelocity);
-      }
+    if (typeof window !== "undefined" && (window as any).stopDraggingAndThrow) {
+      (window as any).stopDraggingAndThrow(touch.clientX, touch.clientY);
     }
   };
 
