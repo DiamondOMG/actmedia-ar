@@ -36,17 +36,18 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
   let hasScoredThisThrow = false;
   let canScore = false; // ตรวจสอบว่าผ่านห่วงจากบนลงล่างเท่านั้น
 
-  // ponytail: variables for flick-to-shoot dragging state and velocity tracking (relative displacement)
+  // ponytail: store screen pixels only from touch events, project to 3D in onUpdate with same-frame camera
   let isDragging = false;
-  const startDragPos = new THREE.Vector3();
-  const currentDragPos = new THREE.Vector3();
+  let startScreenX = 0;
+  let startScreenY = 0;
+  let dragScreenX = 0;
+  let dragScreenY = 0;
   const expectedVelocity = new THREE.Vector3();
 
   // DEBUG: ตัวแปรชั่วคราวสำหรับตรวจสอบ jitter (ลบทิ้งทีหลัง)
   const prevBallPos = new THREE.Vector3();
   const prevCamPos = new THREE.Vector3();
   const prevCamQuat = new THREE.Quaternion();
-  const prevDragTarget = new THREE.Vector3();
   let debugDiv: HTMLDivElement | null = null;
   let debugFrameCount = 0;
 
@@ -68,27 +69,20 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
     return targetPos;
   };
 
-  const calculateExpectedVelocity = (activeCamera: THREE.Camera) => {
-    // คำนวณ Displacement Vector จากจุดที่เริ่มลาก
-    const deltaWorld = new THREE.Vector3().subVectors(currentDragPos, startDragPos);
-
-    // แปลงไปเป็นพิกัดกล้อง (Local Space) เพื่อประเมินทิศทางและระยะทาง
+  // คำนวณเวกเตอร์ความเร็วจาก displacement ระหว่างจุดเริ่มต้นและจุดปัจจุบัน (รับ world pos ที่ project แล้วในเฟรมเดียวกัน)
+  const calculateExpectedVelocity = (startWorldPos: THREE.Vector3, currentWorldPos: THREE.Vector3, activeCamera: THREE.Camera) => {
+    const deltaWorld = new THREE.Vector3().subVectors(currentWorldPos, startWorldPos);
     const deltaLocal = deltaWorld.clone().applyQuaternion(activeCamera.quaternion.clone().invert());
 
-    // กำหนดค่าขีดจำกัดการลากแนวตั้งสูงสุดในพื้นที่ 3D (Z = -0.4) คือ 0.25 เมตร
     const maxDrag = 0.25;
-
-    // การลากนิ้วขึ้น (Local Y > 0) คือต้องการเพิ่มพลังยิงและโยนไปข้างหน้า
     const dy = Math.max(0.0, deltaLocal.y);
     const ratio = Math.min(dy / maxDrag, 1.0);
 
-    // กำหนดทิศทางซ้าย-ขวาตามการปัดเฉียง (คูณ scale 12.0 เพื่อให้ผลสะท้อนชัดเจน และ clamp ไว้ไม่ให้เอียงเว่อร์ไป)
     let tx = deltaLocal.x * 12.0;
     tx = Math.max(-4.0, Math.min(4.0, tx));
 
-    // ปรับแต่งแรงส่ง Y และ Z ตามอัตราส่วนการลากนิ้วขึ้น ( ratio )
-    const ty = 1.5 + ratio * 7.5;   // ช่วง 1.5 ถึง 9.0 m/s
-    const tz = -2.0 - ratio * 8.5;  // ช่วง -2.0 ถึง -10.5 m/s (เครื่องหมายลบคือพุ่งออกจากตัวผู้เล่น)
+    const ty = 1.5 + ratio * 7.5;
+    const tz = -2.0 - ratio * 8.5;
 
     const localVelocity = new THREE.Vector3(tx, ty, tz);
     expectedVelocity.copy(localVelocity).applyQuaternion(activeCamera.quaternion);
@@ -531,28 +525,19 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
         onStateChange({ status: 'thrown' });
       };
 
-      // ฟังก์ชันลากบอลรอบการชู้ตแบบใหม่ (วัดแรงด้วยตำแหน่งสัมบูรณ์)
+      // ฟังก์ชันลากบอลแบบใหม่ (เก็บแค่พิกัดหน้าจอ, project ใน onUpdate)
       (window as any).startDragging = (clientX: number, clientY: number) => {
-        const { camera: activeCamera } = XR8.Threejs.xrScene();
-        if (!activeCamera) return;
-
         isDragging = true;
-
-        const pos = getProjectedPosition(clientX, clientY, activeCamera);
-        startDragPos.copy(pos);
-        currentDragPos.copy(pos);
-
+        startScreenX = clientX;
+        startScreenY = clientY;
+        dragScreenX = clientX;
+        dragScreenY = clientY;
         expectedVelocity.set(0, 0, 0);
       };
 
       (window as any).updateDragging = (clientX: number, clientY: number) => {
-        const { camera: activeCamera } = XR8.Threejs.xrScene();
-        if (!activeCamera) return;
-
-        const pos = getProjectedPosition(clientX, clientY, activeCamera);
-        currentDragPos.copy(pos);
-
-        calculateExpectedVelocity(activeCamera);
+        dragScreenX = clientX;
+        dragScreenY = clientY;
       };
 
       (window as any).stopDraggingAndThrow = (clientX: number, clientY: number) => {
@@ -562,10 +547,10 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
         const { camera: activeCamera } = XR8.Threejs.xrScene();
         if (!activeCamera || isBallThrown || ballsLeft <= 0 || !isHoopPlaced) return;
 
-        // อัปเดตตำแหน่งจุดสุดท้ายก่อนชู้ต
-        const pos = getProjectedPosition(clientX, clientY, activeCamera);
-        currentDragPos.copy(pos);
-        calculateExpectedVelocity(activeCamera);
+        // project ครั้งสุดท้ายด้วยกล้องปัจจุบัน
+        const startWorld = getProjectedPosition(startScreenX, startScreenY, activeCamera);
+        const currentWorld = getProjectedPosition(clientX, clientY, activeCamera);
+        calculateExpectedVelocity(startWorld, currentWorld, activeCamera);
 
         ballVelocity.copy(expectedVelocity);
         isBallThrown = true;
@@ -720,8 +705,13 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
         }
       } else {
         if (isDragging) {
-          // ลากนิ้วไปไหน ลูกบอลค่อยๆ ตามไป
-          ballMesh.position.lerp(currentDragPos, 0.3);
+          // project พิกัดหน้าจอเป็น 3D ในเฟรมเดียวกับ render (ไม่มี cross-frame jitter)
+          const currentWorld = getProjectedPosition(dragScreenX, dragScreenY, camera);
+          ballMesh.position.copy(currentWorld);
+
+          // คำนวณ velocity จาก displacement ในเฟรมเดียวกัน
+          const startWorld = getProjectedPosition(startScreenX, startScreenY, camera);
+          calculateExpectedVelocity(startWorld, currentWorld, camera);
 
           // DEBUG: สร้าง overlay ครั้งแรก
           if (!debugDiv) {
@@ -732,30 +722,23 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
           }
 
           debugFrameCount++;
-          // อัปเดตทุก 5 เฟรม (~12fps) เพื่อไม่กิน CPU แต่อ่านได้
           if (debugFrameCount % 5 === 0) {
             const ballDelta = ballMesh.position.distanceTo(prevBallPos);
             const camPosDelta = camera.position.distanceTo(prevCamPos);
             const camRotDelta = camera.quaternion.angleTo(prevCamQuat) * (180 / Math.PI);
-            const dragTargetDelta = currentDragPos.distanceTo(prevDragTarget);
-            const ballToDragDist = ballMesh.position.distanceTo(currentDragPos);
 
             debugDiv.innerHTML = [
-              `<b style="color:#ff0">⚠ JITTER DEBUG (temp)</b>`,
+              `<b style="color:#ff0">⚠ JITTER DEBUG v2</b>`,
+              `screen:   (${dragScreenX.toFixed(0)}, ${dragScreenY.toFixed(0)})`,
               `ballΔpos: <b>${(ballDelta * 1000).toFixed(2)}mm</b>`,
               `camΔpos:  <b>${(camPosDelta * 1000).toFixed(2)}mm</b>`,
               `camΔrot:  <b>${camRotDelta.toFixed(3)}°</b>`,
-              `dragΔtgt: <b>${(dragTargetDelta * 1000).toFixed(2)}mm</b>`,
-              `ball→tgt: <b>${(ballToDragDist * 1000).toFixed(2)}mm</b>`,
-              `dragTgt:  (${currentDragPos.x.toFixed(4)}, ${currentDragPos.y.toFixed(4)}, ${currentDragPos.z.toFixed(4)})`,
               `ballPos:  (${ballMesh.position.x.toFixed(4)}, ${ballMesh.position.y.toFixed(4)}, ${ballMesh.position.z.toFixed(4)})`,
-              `camPos:   (${camera.position.x.toFixed(4)}, ${camera.position.y.toFixed(4)}, ${camera.position.z.toFixed(4)})`,
             ].join('<br>');
 
             prevBallPos.copy(ballMesh.position);
             prevCamPos.copy(camera.position);
             prevCamQuat.copy(camera.quaternion);
-            prevDragTarget.copy(currentDragPos);
           }
         } else {
           // DEBUG: ซ่อน overlay เมื่อไม่ได้ลาก
@@ -763,7 +746,7 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
             debugDiv.remove();
             debugDiv = null;
           }
-          // ซิงก์ตำแหน่งลูกบอลให้อยู่ติดกับกล้อง (เสมือนผู้ใช้ถือไว้เพื่อพร้อมปัดชู้ต)
+          // ซิงก์ตำแหน่งลูกบอลให้อยู่ติดกับกล้อง
           const offset = new THREE.Vector3(0, -0.15, -0.4);
           offset.applyQuaternion(camera.quaternion);
           ballMesh.position.copy(camera.position).add(offset);
