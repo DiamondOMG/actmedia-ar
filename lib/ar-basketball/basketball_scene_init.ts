@@ -709,9 +709,9 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
         }
       } else {
         if (isDragging) {
-          // ลากนิ้วไปไหน ลูกบอลค่อยๆ ตามตำแหน่ง World Pos ที่อัปเดตตามเฟรมกล้องแบบเรียลไทม์ (ป้องกันการสั่น)
+          // ลากนิ้วไปไหน ลูกบอลแปลงจาก Local→World แล้ว snap ตรงๆ (ไม่ lerp เพราะทำให้สั่นตาม AR jitter)
           const currentDragPosWorld = currentDragPosLocal.clone().applyMatrix4(camera.matrixWorld);
-          ballMesh.position.lerp(currentDragPosWorld, 0.3);
+          ballMesh.position.copy(currentDragPosWorld);
           
           // อัปเดตทิศทางการยิงโลกเพื่อปรับวิถีโค้งตามการหันของกล้องแบบเรียลไทม์
           calculateExpectedVelocity(camera);
