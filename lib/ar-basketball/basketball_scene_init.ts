@@ -42,6 +42,14 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
   const currentDragPosLocal = new THREE.Vector3();
   const expectedVelocity = new THREE.Vector3();
 
+  // ponytail: anti-jitter freeze — lock ball position if finger stays still > 2s
+  // ceiling: uses screen-pixel deadzone (3px), upgrade to adaptive threshold if needed
+  let lastTouchScreenX = 0;
+  let lastTouchScreenY = 0;
+  let lastSignificantMoveTime = 0;
+  let frozenWorldPos: THREE.Vector3 | null = null;
+  let frozenVelocity: THREE.Vector3 | null = null;
+
   const getProjectedPosition = (clientX: number, clientY: number, activeCamera: THREE.Camera): THREE.Vector3 => {
     const ndc = new THREE.Vector2(
       (clientX / window.innerWidth) * 2 - 1,
@@ -526,6 +534,11 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
         if (!activeCamera) return;
 
         isDragging = true;
+        lastTouchScreenX = clientX;
+        lastTouchScreenY = clientY;
+        lastSignificantMoveTime = Date.now();
+        frozenWorldPos = null;
+        frozenVelocity = null;
 
         const worldPos = getProjectedPosition(clientX, clientY, activeCamera);
         startDragPosLocal.copy(worldPos).applyMatrix4(activeCamera.matrixWorldInverse);
@@ -538,10 +551,23 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
         const { camera: activeCamera } = XR8.Threejs.xrScene();
         if (!activeCamera) return;
 
-        const worldPos = getProjectedPosition(clientX, clientY, activeCamera);
-        currentDragPosLocal.copy(worldPos).applyMatrix4(activeCamera.matrixWorldInverse);
+        // เช็คว่านิ้วขยับจริงหรือแค่ jitter (deadzone 3px)
+        const sdx = clientX - lastTouchScreenX;
+        const sdy = clientY - lastTouchScreenY;
+        const screenDist = Math.sqrt(sdx * sdx + sdy * sdy);
 
-        calculateExpectedVelocity(activeCamera);
+        if (screenDist > 3) {
+          lastTouchScreenX = clientX;
+          lastTouchScreenY = clientY;
+          lastSignificantMoveTime = Date.now();
+          frozenWorldPos = null;
+          frozenVelocity = null;
+
+          const worldPos = getProjectedPosition(clientX, clientY, activeCamera);
+          currentDragPosLocal.copy(worldPos).applyMatrix4(activeCamera.matrixWorldInverse);
+          calculateExpectedVelocity(activeCamera);
+        }
+        // ถ้านิ้วขยับน้อยกว่า 3px ไม่อัปเดตอะไรเลย ปล่อยให้ onUpdate จัดการ freeze
       };
 
       (window as any).stopDraggingAndThrow = (clientX: number, clientY: number) => {
@@ -709,12 +735,22 @@ export const initBasketballScenePipelineModule = (onStateChange: (state: Partial
         }
       } else {
         if (isDragging) {
-          // ลากนิ้วไปไหน ลูกบอลแปลงจาก Local→World แล้ว snap ตรงๆ (ไม่ lerp เพราะทำให้สั่นตาม AR jitter)
-          const currentDragPosWorld = currentDragPosLocal.clone().applyMatrix4(camera.matrixWorld);
-          ballMesh.position.copy(currentDragPosWorld);
-          
-          // อัปเดตทิศทางการยิงโลกเพื่อปรับวิถีโค้งตามการหันของกล้องแบบเรียลไทม์
-          calculateExpectedVelocity(camera);
+          const now = Date.now();
+          // ถ้านิ้วนิ่งมานานกว่า 2 วินาที ให้ล็อคตำแหน่งและวิถีโค้งไว้เลย (ป้องกัน AR jitter)
+          if (!frozenWorldPos && (now - lastSignificantMoveTime) > 2000) {
+            frozenWorldPos = ballMesh.position.clone();
+            frozenVelocity = expectedVelocity.clone();
+          }
+
+          if (frozenWorldPos) {
+            ballMesh.position.copy(frozenWorldPos);
+            // ไม่ต้องคำนวณ velocity ใหม่ ใช้ค่าที่ล็อคไว้
+            if (frozenVelocity) expectedVelocity.copy(frozenVelocity);
+          } else {
+            const currentDragPosWorld = currentDragPosLocal.clone().applyMatrix4(camera.matrixWorld);
+            ballMesh.position.copy(currentDragPosWorld);
+            calculateExpectedVelocity(camera);
+          }
         } else {
           // ซิงก์ตำแหน่งลูกบอลให้อยู่ติดกับกล้อง (เสมือนผู้ใช้ถือไว้เพื่อพร้อมปัดชู้ต)
           const offset = new THREE.Vector3(0, -0.15, -0.4);
